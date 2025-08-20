@@ -56,12 +56,14 @@ from .const import (
     CONF_MAX_CONDUCTIVITY,
     CONF_MAX_DLI,
     CONF_MAX_HUMIDITY,
+    CONF_MAX_CO2,
     CONF_MAX_ILLUMINANCE,
     CONF_MAX_MOISTURE,
     CONF_MAX_TEMPERATURE,
     CONF_MIN_CONDUCTIVITY,
     CONF_MIN_DLI,
     CONF_MIN_HUMIDITY,
+    CONF_MIN_CO2,
     CONF_MIN_ILLUMINANCE,
     CONF_MIN_MOISTURE,
     CONF_MIN_TEMPERATURE,
@@ -83,6 +85,7 @@ from .const import (
     FLOW_ERROR_NOTFOUND,
     FLOW_FORCE_SPECIES_UPDATE,
     FLOW_HUMIDITY_TRIGGER,
+    FLOW_CO2_TRIGGER,
     FLOW_ILLUMINANCE_TRIGGER,
     FLOW_MOISTURE_TRIGGER,
     FLOW_PLANT_INFO,
@@ -90,6 +93,7 @@ from .const import (
     FLOW_RIGHT_PLANT,
     FLOW_SENSOR_CONDUCTIVITY,
     FLOW_SENSOR_HUMIDITY,
+    FLOW_SENSOR_CO2,
     FLOW_SENSOR_ILLUMINANCE,
     FLOW_SENSOR_MOISTURE,
     FLOW_SENSOR_TEMPERATURE,
@@ -143,8 +147,10 @@ from .const import (
     CONF_DEFAULT_MIN_TEMPERATURE,
     CONF_DEFAULT_MAX_CONDUCTIVITY,
     CONF_DEFAULT_MIN_CONDUCTIVITY,
-    CONF_DEFAULT_MAX_HUMIDITY,
     CONF_DEFAULT_MIN_HUMIDITY,
+    CONF_DEFAULT_MIN_CO2,
+    CONF_DEFAULT_MAX_HUMIDITY,
+    CONF_DEFAULT_MAX_CO2,
     ATTR_ORIGINAL_FLOWERING_DURATION,
     CONF_DEFAULT_MAX_WATER_CONSUMPTION,
     CONF_DEFAULT_MIN_WATER_CONSUMPTION,
@@ -221,7 +227,9 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_DEFAULT_MAX_CONDUCTIVITY: 2000,
                     CONF_DEFAULT_MIN_CONDUCTIVITY: 500,
                     CONF_DEFAULT_MAX_HUMIDITY: 60,
+                    CONF_DEFAULT_MAX_CO2: 4000,
                     CONF_DEFAULT_MIN_HUMIDITY: 20,
+                    CONF_DEFAULT_MIN_CO2: 300,
                     CONF_DEFAULT_MAX_WATER_CONSUMPTION: 2.0,
                     CONF_DEFAULT_MIN_WATER_CONSUMPTION: 0.1,
                     CONF_DEFAULT_MAX_FERTILIZER_CONSUMPTION: 2000,
@@ -252,6 +260,7 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     "default_conductivity_aggregation": DEFAULT_AGGREGATIONS['conductivity'],
                     "default_illuminance_aggregation": DEFAULT_AGGREGATIONS['illuminance'],
                     "default_humidity_aggregation": DEFAULT_AGGREGATIONS['humidity'],
+                    "default_CO2_aggregation": DEFAULT_AGGREGATIONS['CO2'],
                     "default_ppfd_aggregation": DEFAULT_AGGREGATIONS['ppfd'],
                     "default_dli_aggregation": DEFAULT_AGGREGATIONS['dli'],
                     "default_total_integral_aggregation": DEFAULT_AGGREGATIONS['total_integral'],
@@ -329,6 +338,7 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     'conductivity': user_input.get('conductivity_aggregation', config_data.get("default_conductivity_aggregation", DEFAULT_AGGREGATIONS['conductivity'])),
                     'illuminance': user_input.get('illuminance_aggregation', config_data.get("default_illuminance_aggregation", DEFAULT_AGGREGATIONS['illuminance'])),
                     'humidity': user_input.get('humidity_aggregation', config_data.get("default_humidity_aggregation", DEFAULT_AGGREGATIONS['humidity'])),
+                    'CO2': user_input.get('CO2_aggregation', config_data.get("default_CO2_aggregation", DEFAULT_AGGREGATIONS['CO2'])),
                     'ppfd': user_input.get('ppfd_aggregation', config_data.get("default_ppfd_aggregation", DEFAULT_AGGREGATIONS['ppfd'])),
                     'dli': user_input.get('dli_aggregation', config_data.get("default_dli_aggregation", DEFAULT_AGGREGATIONS['dli'])),
                     'total_integral': user_input.get('total_integral_aggregation', config_data.get("default_total_integral_aggregation", DEFAULT_AGGREGATIONS['total_integral'])),
@@ -401,6 +411,8 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         default=config_data.get("default_illuminance_aggregation", DEFAULT_AGGREGATIONS['illuminance'])): vol.In(AGGREGATION_METHODS),
             vol.Optional("humidity_aggregation", 
                         default=config_data.get("default_humidity_aggregation", DEFAULT_AGGREGATIONS['humidity'])): vol.In(AGGREGATION_METHODS),
+            vol.Optional("CO2_aggregation", 
+                        default=config_data.get("default_CO2_aggregation", DEFAULT_AGGREGATIONS['CO2'])): vol.In(AGGREGATION_METHODS),
             # Erweiterte Aggregationsmethoden für DLI/PPFD
             vol.Optional("ppfd_aggregation", 
                         default=config_data.get("default_ppfd_aggregation", DEFAULT_AGGREGATIONS['ppfd'])): vol.In(AGGREGATION_METHODS_EXTENDED),
@@ -469,6 +481,7 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 FLOW_SENSOR_CONDUCTIVITY: user_input.get(FLOW_SENSOR_CONDUCTIVITY),
                 FLOW_SENSOR_ILLUMINANCE: user_input.get(FLOW_SENSOR_ILLUMINANCE),
                 FLOW_SENSOR_HUMIDITY: user_input.get(FLOW_SENSOR_HUMIDITY),
+                FLOW_SENSOR_CO2: user_input.get(FLOW_SENSOR_CO2),
                 FLOW_SENSOR_POWER_CONSUMPTION: user_input.get(FLOW_SENSOR_POWER_CONSUMPTION),
                 FLOW_SENSOR_PH: user_input.get(FLOW_SENSOR_PH),
             }
@@ -568,6 +581,14 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     }
                 }
             ),
+            vol.Optional(FLOW_SENSOR_CO2): selector(
+                {
+                    ATTR_ENTITY: {
+                        ATTR_DEVICE_CLASS: SensorDeviceClass.CO2,
+                        ATTR_DOMAIN: DOMAIN_SENSOR,
+                    }
+                }
+            ),
             vol.Optional(FLOW_SENSOR_POWER_CONSUMPTION, description={
                 "name": "Total Power Consumption Sensor"
             }): selector(
@@ -638,7 +659,9 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 CONF_DEFAULT_MAX_CONDUCTIVITY: 2000,
                 CONF_DEFAULT_MIN_CONDUCTIVITY: 500,
                 CONF_DEFAULT_MAX_HUMIDITY: 60,
+                CONF_DEFAULT_MAX_CO2: 4000,
                 CONF_DEFAULT_MIN_HUMIDITY: 20,
+                CONF_DEFAULT_MIN_CO2: 300,
                 CONF_DEFAULT_MAX_WATER_CONSUMPTION: 2.0,
                 CONF_DEFAULT_MIN_WATER_CONSUMPTION: 0.1,
                 CONF_DEFAULT_MAX_FERTILIZER_CONSUMPTION: 2000,
@@ -673,7 +696,9 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_MAX_CONDUCTIVITY,
                         CONF_MIN_CONDUCTIVITY,
                         CONF_MAX_HUMIDITY,
+                        CONF_MAX_CO2,
                         CONF_MIN_HUMIDITY,
+                        CONF_MIN_CO2,
                         CONF_MAX_WATER_CONSUMPTION,
                         CONF_MIN_WATER_CONSUMPTION,
                         CONF_MAX_FERTILIZER_CONSUMPTION,
@@ -865,6 +890,8 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         data_schema[vol.Optional(CONF_MIN_CONDUCTIVITY, default=int(config_data.get(CONF_DEFAULT_MIN_CONDUCTIVITY, 500)))] = int
         data_schema[vol.Optional(CONF_MAX_HUMIDITY, default=int(config_data.get(CONF_DEFAULT_MAX_HUMIDITY, 60)))] = int
         data_schema[vol.Optional(CONF_MIN_HUMIDITY, default=int(config_data.get(CONF_DEFAULT_MIN_HUMIDITY, 20)))] = int
+        data_schema[vol.Optional(CONF_MAX_CO2, default=int(config_data.get(CONF_DEFAULT_MAX_CO2, 4000)))] = int
+        data_schema[vol.Optional(CONF_MIN_CO2, default=int(config_data.get(CONF_DEFAULT_MIN_CO2, 300)))] = int
         data_schema[vol.Optional(CONF_MAX_WATER_CONSUMPTION, default=float(config_data.get(CONF_DEFAULT_MAX_WATER_CONSUMPTION, 2.0)))] = cv.positive_float
         data_schema[vol.Optional(CONF_MIN_WATER_CONSUMPTION, default=float(config_data.get(CONF_DEFAULT_MIN_WATER_CONSUMPTION, 0.1)))] = cv.positive_float
         data_schema[vol.Optional(CONF_MAX_FERTILIZER_CONSUMPTION, default=int(config_data.get(CONF_DEFAULT_MAX_FERTILIZER_CONSUMPTION, 2000)))] = int
@@ -983,6 +1010,8 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     CONF_DEFAULT_MIN_CONDUCTIVITY: CONF_DEFAULT_MIN_CONDUCTIVITY,
                     CONF_DEFAULT_MAX_HUMIDITY: CONF_DEFAULT_MAX_HUMIDITY,
                     CONF_DEFAULT_MIN_HUMIDITY: CONF_DEFAULT_MIN_HUMIDITY,
+                    CONF_DEFAULT_MAX_CO2: CONF_DEFAULT_MAX_CO2,
+                    CONF_DEFAULT_MIN_CO2: CONF_DEFAULT_MIN_CO2,
                     CONF_DEFAULT_MAX_WATER_CONSUMPTION: CONF_DEFAULT_MAX_WATER_CONSUMPTION,
                     CONF_DEFAULT_MIN_WATER_CONSUMPTION: CONF_DEFAULT_MIN_WATER_CONSUMPTION,
                     CONF_DEFAULT_MAX_FERTILIZER_CONSUMPTION: CONF_DEFAULT_MAX_FERTILIZER_CONSUMPTION,
@@ -1002,6 +1031,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     "default_conductivity_aggregation": "default_conductivity_aggregation",
                     "default_illuminance_aggregation": "default_illuminance_aggregation",
                     "default_humidity_aggregation": "default_humidity_aggregation",
+                    "default_CO2_aggregation": "default_CO2_aggregation",
                     "default_ppfd_aggregation": "default_ppfd_aggregation",
                     "default_dli_aggregation": "default_dli_aggregation",
                     "default_total_integral_aggregation": "default_total_integral_aggregation",
@@ -1044,6 +1074,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     FLOW_SENSOR_CONDUCTIVITY: self.plant.sensor_conductivity,
                     FLOW_SENSOR_ILLUMINANCE: self.plant.sensor_illuminance,
                     FLOW_SENSOR_HUMIDITY: self.plant.sensor_humidity,
+                    FLOW_SENSOR_CO2: self.plant.sensor_CO2,
                     FLOW_SENSOR_POWER_CONSUMPTION: self.plant.total_power_consumption,
                     FLOW_SENSOR_PH: self.plant.sensor_ph,  # pH-Sensor zur Liste hinzufügen
                 }
@@ -1181,8 +1212,16 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     default=self.entry.data[FLOW_PLANT_INFO].get(CONF_DEFAULT_MAX_HUMIDITY, 60)
                 ): int,
                 vol.Optional(
+                    CONF_DEFAULT_MAX_CO2,
+                    default=self.entry.data[FLOW_PLANT_INFO].get(CONF_DEFAULT_MAX_CO2, 60)
+                ): int,
+                vol.Optional(
                     CONF_DEFAULT_MIN_HUMIDITY,
                     default=self.entry.data[FLOW_PLANT_INFO].get(CONF_DEFAULT_MIN_HUMIDITY, 20)
+                ): int,
+                vol.Optional(
+                    CONF_DEFAULT_MIN_CO2,
+                    default=self.entry.data[FLOW_PLANT_INFO].get(CONF_DEFAULT_MIN_CO2, 20)
                 ): int,
                 vol.Optional(
                     CONF_DEFAULT_MAX_WATER_CONSUMPTION,
@@ -1259,6 +1298,10 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Optional(
                     "default_humidity_aggregation",
                     default=self.entry.data[FLOW_PLANT_INFO].get("default_humidity_aggregation", DEFAULT_AGGREGATIONS['humidity'])
+                ): vol.In(AGGREGATION_METHODS),
+                vol.Optional(
+                    "default_co2_aggregation",
+                    default=self.entry.data[FLOW_PLANT_INFO].get("default_co2_aggregation", DEFAULT_AGGREGATIONS['co2'])
                 ): vol.In(AGGREGATION_METHODS),
                 vol.Optional(
                     "default_dli_aggregation",
@@ -1374,6 +1417,8 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                         sensor_entities.setdefault("temperature", []).append(entity_id)
                     elif device_class == SensorDeviceClass.HUMIDITY:
                         sensor_entities.setdefault("humidity", []).append(entity_id)
+                    elif device_class == SensorDeviceClass.CO2:
+                        sensor_entities.setdefault("CO2", []).append(entity_id)
                     elif device_class == SensorDeviceClass.ILLUMINANCE:
                         sensor_entities.setdefault("illuminance", []).append(entity_id)
                     elif device_class == SensorDeviceClass.MOISTURE:
@@ -1446,6 +1491,18 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                         }
                     )
 
+                if sensor_entities.get("co2"):
+                    data_schema[
+                        vol.Optional(FLOW_SENSOR_CO2, default=self.plant.sensor_co2.external_sensor if self.plant.sensor_co2 else None)
+                    ] = selector(
+                        {
+                            ATTR_ENTITY: {
+                                ATTR_DEVICE_CLASS: SensorDeviceClass.CO2,
+                                ATTR_DOMAIN: DOMAIN_SENSOR,
+                            }
+                        }
+                    )
+
                 if sensor_entities.get("energy"):
                     data_schema[
                         vol.Optional(FLOW_SENSOR_POWER_CONSUMPTION, default=self.plant.total_power_consumption.external_sensor if hasattr(self.plant.total_power_consumption, 'external_sensor') else None)
@@ -1482,6 +1539,9 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             )
             data_schema[
                 vol.Optional(FLOW_HUMIDITY_TRIGGER, default=self.plant.humidity_trigger)
+            ] = cv.boolean
+            data_schema[
+                vol.Optional(FLOW_CO2_TRIGGER, default=self.plant.co2_trigger)
             ] = cv.boolean
             data_schema[
                 vol.Optional(
