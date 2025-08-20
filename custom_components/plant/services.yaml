@@ -120,6 +120,14 @@ create_plant:
         entity:
           domain: sensor
           device_class: humidity
+    CO2_sensor:
+      name: CO2 Sensor
+      description: CO2 sensor
+      required: false
+      selector:
+        entity:
+          domain: sensor
+          device_class: CO2
     power_consumption_sensor:
       name: Power Consumption Sensor
       description: Energieverbrauchssensor
@@ -246,6 +254,14 @@ clone_plant:
         entity:
           domain: sensor
           device_class: humidity
+    CO2_sensor:
+      name: CO2 Sensor
+      description: CO2 sensor for the clone
+      required: false
+      selector:
+        entity:
+          domain: sensor
+          device_class: CO2
     power_consumption_sensor:
       name: Power Consumption Sensor
       description: Power consumption sensor for the clone
@@ -721,3 +737,85 @@ import_plants:
       selector:
         boolean:
 
+add_watering:
+  name: Add watering entry
+  description: Fügt einen manuellen Bewässerungseintrag hinzu und addiert ihn zur Gesamt-Wasserverbrauchsanzeige.
+  fields:
+    entity_id:
+      name: Plant entity
+      description: Die Pflanze oder der Cycle, für den der Eintrag hinzugefügt wird
+      required: true
+      selector:
+        entity:
+          domain:
+            - plant
+            - cycle
+    amount_liters:
+      name: Menge (L)
+      description: Zu addierende Wassermenge in Litern
+      example: 2
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 1000
+          step: 0.1
+          unit_of_measurement: L
+          mode: box
+    note:
+      name: Notiz
+      description: Optionaler Kommentar, der im Journal vermerkt wird
+      required: false
+      selector:
+        text:
+
+add_conductivity:
+  name: Add EC measurement
+  description: Fügt eine manuelle Leitfähigkeitsmessung (uS/cm) hinzu und setzt den aktuellen Conductivity-Sensor.
+  fields:
+    entity_id:
+      name: Plant entity
+      description: Die Pflanze oder der Cycle, für den der Messwert gesetzt wird
+      required: true
+      selector:
+        entity:
+          domain:
+            - plant
+            - cycle
+    value_us_cm:
+      name: EC (uS/cm)
+      description: Leitfähigkeit in Mikro-Siemens pro cm
+      example: 1200
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 100000
+          step: 1
+          unit_of_measurement: uS/cm
+          mode: box
+
+add_ph:
+  name: Add pH measurement
+  description: Fügt eine manuelle pH-Messung hinzu und setzt den aktuellen pH-Sensor.
+  fields:
+    entity_id:
+      name: Plant entity
+      description: Die Pflanze oder der Cycle, für den der Messwert gesetzt wird
+      required: true
+      selector:
+        entity:
+          domain:
+            - plant
+            - cycle
+    value:
+      name: pH
+      description: pH-Wert (0-14)
+      example: 6.5
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 14
+          step: 0.1
+          mode: box

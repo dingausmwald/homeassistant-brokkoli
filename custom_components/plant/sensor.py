@@ -61,6 +61,7 @@ from .const import (
     FLOW_PLANT_INFO,
     FLOW_SENSOR_CONDUCTIVITY,
     FLOW_SENSOR_HUMIDITY,
+    FLOW_SENSOR_CO2,
     FLOW_SENSOR_ILLUMINANCE,
     FLOW_SENSOR_MOISTURE,
     FLOW_SENSOR_TEMPERATURE,
@@ -69,6 +70,7 @@ from .const import (
     ICON_CONDUCTIVITY,
     ICON_DLI,
     ICON_HUMIDITY,
+    ICON_CO2,
     ICON_ILLUMINANCE,
     ICON_MOISTURE,
     ICON_PPFD,
@@ -78,6 +80,7 @@ from .const import (
     READING_CONDUCTIVITY,
     READING_DLI,
     READING_HUMIDITY,
+    READING_CO2,
     READING_ILLUMINANCE,
     READING_MOISTURE,
     READING_PPFD,
@@ -122,9 +125,10 @@ async def async_setup_entry(
         pcurm = PlantCurrentMoisture(hass, entry, plant)
         pcurt = PlantCurrentTemperature(hass, entry, plant)
         pcurh = PlantCurrentHumidity(hass, entry, plant)
+        pcurCO2 = PlantCurrentCO2(hass, entry, plant)
         pcurph = PlantCurrentPh(hass, entry, plant)  # Neuer pH Sensor
         
-        plant_sensors = [pcurb, pcurc, pcurm, pcurt, pcurh, pcurph]  # pH Sensor hinzugefügt
+        plant_sensors = [pcurb, pcurc, pcurm, pcurt, pcurh, pcurph, pcurCO2]  # pH Sensor hinzugefügt
         
         # Erst die Entities zu HA hinzufügen
         async_add_entities(plant_sensors)
@@ -137,6 +141,7 @@ async def async_setup_entry(
             conductivity=pcurc,
             illuminance=pcurb,
             humidity=pcurh,
+            CO2=pcurCO2,
             power_consumption=None,  # Wird später gesetzt
             ph=pcurph,  # pH Sensor hinzugefügt
         )
@@ -152,6 +157,8 @@ async def async_setup_entry(
             pcurt.replace_external_sensor(entry.data[FLOW_PLANT_INFO][FLOW_SENSOR_TEMPERATURE])
         if entry.data[FLOW_PLANT_INFO].get(FLOW_SENSOR_HUMIDITY):
             pcurh.replace_external_sensor(entry.data[FLOW_PLANT_INFO][FLOW_SENSOR_HUMIDITY])
+        if entry.data[FLOW_PLANT_INFO].get(FLOW_SENSOR_CO2):
+            pcurCO2.replace_external_sensor(entry.data[FLOW_PLANT_INFO][FLOW_SENSOR_CO2])
         if entry.data[FLOW_PLANT_INFO].get(FLOW_SENSOR_PH):  # pH Sensor zuweisen
             pcurph.replace_external_sensor(entry.data[FLOW_PLANT_INFO][FLOW_SENSOR_PH])
 
@@ -229,73 +236,77 @@ async def async_setup_entry(
                 current=pcurp,
                 total=total_power_consumption
             )
-
-    # Erstelle die Median-Sensoren für Cycles
     if plant.device_type == DEVICE_TYPE_CYCLE:
-        cycle_sensors = []
-        
-        # Erstelle die Basis-Sensoren
-        for sensor_type in ["temperature", "moisture", "conductivity", "illuminance", "humidity", "ph"]:
-            sensor = CycleMedianSensor(hass, entry, plant, sensor_type)
-            cycle_sensors.append(sensor)
-            
-        # Erstelle die berechneten Sensoren
-        for sensor_type in [
-            "ppfd", 
-            "dli", 
-            "total_integral", 
+        cycle_sensors = {}
+
+        # Basis-Sensoren
+        base_sensor_types = [
+            "temperature",
+            "moisture",
+            "conductivity",
+            "illuminance",
+            "humidity",
+            "ph",
+            "CO2",
+        ]
+        for sensor_type in base_sensor_types:
+            cycle_sensors[sensor_type] = CycleMedianSensor(hass, entry, plant, sensor_type)
+
+        # Berechnete Sensoren
+        calculated_sensor_types = [
+            "ppfd",
+            "dli",
+            "total_integral",
             "moisture_consumption",
-            "total_water_consumption",  # Füge Total Water hinzu
+            "total_water_consumption",   # Füge Total Water hinzu
             "fertilizer_consumption",
             "total_fertilizer_consumption",  # Füge Total Fertilizer hinzu
             "power_consumption",
-            "total_power_consumption"  # Füge Total Power hinzu
-        ]:
-            sensor = CycleMedianSensor(hass, entry, plant, sensor_type)
-            cycle_sensors.append(sensor)
-        
+            "total_power_consumption",   # Füge Total Power hinzu
+        ]
+        for sensor_type in calculated_sensor_types:
+            cycle_sensors[sensor_type] = CycleMedianSensor(hass, entry, plant, sensor_type)
+
         # Füge alle Sensoren zu Home Assistant hinzu
-        async_add_entities(cycle_sensors)
-        
+        async_add_entities(cycle_sensors.values())
+
         # Füge die Sensoren der Plant hinzu
         plant.add_sensors(
-            temperature=cycle_sensors[0],
-            moisture=cycle_sensors[1],
-            conductivity=cycle_sensors[2],
-            illuminance=cycle_sensors[3],
-            humidity=cycle_sensors[4],
-            power_consumption=cycle_sensors[13],  # Aktualisiere Index für Power Consumption (eins mehr wegen pH)
-            ph=cycle_sensors[5],  # pH-Sensor hinzugefügt
+            temperature=cycle_sensors["temperature"],
+            moisture=cycle_sensors["moisture"],
+            conductivity=cycle_sensors["conductivity"],
+            illuminance=cycle_sensors["illuminance"],
+            humidity=cycle_sensors["humidity"],
+            CO2=cycle_sensors["CO2"],
+            power_consumption=cycle_sensors["power_consumption"],
+            ph=cycle_sensors["ph"],
         )
-        
+
         # Füge die berechneten Sensoren hinzu
         plant.add_calculations(
-            ppfd=cycle_sensors[6],
-            total_integral=cycle_sensors[8],
-            moisture_consumption=cycle_sensors[9],
-            fertilizer_consumption=cycle_sensors[11]
+            ppfd=cycle_sensors["ppfd"],
+            total_integral=cycle_sensors["total_integral"],
+            moisture_consumption=cycle_sensors["moisture_consumption"],
+            fertilizer_consumption=cycle_sensors["fertilizer_consumption"],
         )
-        plant.add_dli(dli=cycle_sensors[7])
-        
-        # Füge auch für Cycles die Total Consumption Sensoren direkt hinzu
-        plant.total_water_consumption = cycle_sensors[10]
-        plant.total_fertilizer_consumption = cycle_sensors[12]
-        
-        # Korrigierte Verwendung der add_power_consumption_sensors Methode
-        # Der aktuelle Sensor wurde bereits durch add_sensors hinzugefügt, hier nur total hinzufügen
+        plant.add_dli(dli=cycle_sensors["dli"])
+
+        # Total Consumption Sensoren
+        plant.total_water_consumption = cycle_sensors["total_water_consumption"]
+        plant.total_fertilizer_consumption = cycle_sensors["total_fertilizer_consumption"]
+
+        # Power Consumption Sensoren
         plant.add_power_consumption_sensors(
-            current=plant.sensor_power_consumption,  # Bereits zugewiesen
-            total=cycle_sensors[14]
+            current=cycle_sensors["power_consumption"],
+            total=cycle_sensors["total_power_consumption"],
         )
 
     # Füge Energiekosten-Sensor hinzu
     energy_cost = PlantEnergyCost(hass, entry, plant)
-    plant.energy_cost = energy_cost  # Speichere Referenz in der Plant
-    
+    plant.energy_cost = energy_cost
     async_add_entities([energy_cost])
 
     return True
-
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
@@ -543,6 +554,16 @@ class PlantCurrentConductivity(PlantCurrentStatus):
         """Device class"""
         return ATTR_CONDUCTIVITY
 
+    async def set_manual_value(self, value: float) -> None:
+        """Set a manual conductivity measurement (uS/cm)."""
+        try:
+            if value is None:
+                return
+            self._attr_native_value = float(value)
+            self.async_write_ha_state()
+        except (TypeError, ValueError):
+            return
+
 
 class PlantCurrentMoisture(PlantCurrentStatus):
     """Entity class for the current moisture meter"""
@@ -724,6 +745,26 @@ class PlantCurrentHumidity(PlantCurrentStatus):
     def device_class(self) -> str:
         """Device class"""
         return SensorDeviceClass.HUMIDITY
+
+class PlantCurrentCO2(PlantCurrentStatus):
+    """Entity class for the current CO2 meter"""
+
+    def __init__(
+        self, hass: HomeAssistant, config: ConfigEntry, plantdevice: Entity
+    ) -> None:
+        """Initialize the sensor"""
+        self._attr_name = f"{plantdevice.name} {READING_CO2}"
+        self._attr_unique_id = f"{config.entry_id}-current-CO2"
+        self._attr_has_entity_name = False
+        self._external_sensor = config.data[FLOW_PLANT_INFO].get(FLOW_SENSOR_CO2)
+        self._attr_icon = ICON_CO2
+        self._attr_native_unit_of_measurement = "ppm"
+        super().__init__(hass, config, plantdevice)
+
+    @property
+    def device_class(self) -> str:
+        """Device class"""
+        return SensorDeviceClass.CO2
 
 
 class PlantCurrentPpfd(PlantCurrentStatus):
@@ -1154,6 +1195,33 @@ class PlantDummyHumidity(PlantDummyStatus):
         """Device class"""
         return SensorDeviceClass.HUMIDITY
 
+class PlantDummyCO2(PlantDummyStatus):
+    """Dummy sensor"""
+
+    def __init__(
+        self, hass: HomeAssistant, config: ConfigEntry, plantdevice: Entity
+    ) -> None:
+        """Init the dummy sensor"""
+        self._attr_name = (
+            f"Dummy {plantdevice.name} {READING_CO2}"
+        )
+        self._attr_unique_id = f"{config.entry_id}-dummy-CO2"
+        self._attr_icon = ICON_CO2
+        self._attr_native_unit_of_measurement = PERCENTAGE
+        super().__init__(hass, config, plantdevice)
+        self._attr_native_value = random.randint(25, 90)
+
+    async def async_update(self) -> int:
+        """Give out a dummy value"""
+        test = random.randint(0, 100)
+        if test > 50:
+            self._attr_native_value = random.randint(25, 90)
+
+    @property
+    def device_class(self) -> str:
+        """Device class"""
+        return SensorDeviceClass.CO2
+
 
 class CycleMedianSensor(SensorEntity):
     """Sensor that shows median values for a cycle."""
@@ -1180,6 +1248,8 @@ class CycleMedianSensor(SensorEntity):
             self._attr_name = f"{plant.name} Total {READING_PPFD} Integral"
         elif sensor_type == "humidity":
             self._attr_name = f"{plant.name} {READING_HUMIDITY}"
+        elif sensor_type == "CO2":
+            self._attr_name = f"{plant.name} {READING_CO2}"
         elif sensor_type == "moisture":
             self._attr_name = f"{plant.name} {READING_MOISTURE}"
         elif sensor_type == "moisture_consumption":
@@ -1220,6 +1290,10 @@ class CycleMedianSensor(SensorEntity):
             self._attr_native_unit_of_measurement = PERCENTAGE
             self._attr_icon = ICON_HUMIDITY
             self._attr_device_class = SensorDeviceClass.HUMIDITY
+        elif sensor_type == "CO2":
+            self._attr_native_unit_of_measurement = "ppm"
+            self._attr_icon = ICON_CO2
+            self._attr_device_class = SensorDeviceClass.CO2
         elif sensor_type == "ph":  # Neuer pH Sensor
             self._attr_native_unit_of_measurement = None  # pH hat keine Einheit
             self._attr_icon = ICON_PH
@@ -1524,6 +1598,8 @@ class PlantTotalWaterConsumption(RestoreSensor):
         self._history = []
         self._last_update = None
         self._attr_native_value = 0  # Starte immer bei 0
+        self._manual_additions = 0.0
+        self._manual_entries = []  # list of dicts {ts, amount, note}
         
         # Bei Neuerstellung explizit auf 0 setzen
         if config.data[FLOW_PLANT_INFO].get(ATTR_IS_NEW_PLANT, False):
@@ -1549,6 +1625,8 @@ class PlantTotalWaterConsumption(RestoreSensor):
             "pot_size": self._plant.pot_size.native_value if self._plant.pot_size else None,
             "water_capacity": self._plant.water_capacity.native_value if self._plant.water_capacity else None,
             "last_update": self._last_update,
+            "manual_additions": round(self._manual_additions, 2),
+            "manual_entries": self._manual_entries,
         }
 
     async def async_added_to_hass(self) -> None:
@@ -1563,6 +1641,16 @@ class PlantTotalWaterConsumption(RestoreSensor):
                     self._attr_native_value = float(last_state.state)
                     if last_state.attributes.get("last_update"):
                         self._last_update = last_state.attributes["last_update"]
+                    if last_state.attributes.get("manual_additions") is not None:
+                        try:
+                            self._manual_additions = float(last_state.attributes.get("manual_additions", 0.0))
+                        except (TypeError, ValueError):
+                            self._manual_additions = 0.0
+                    if last_state.attributes.get("manual_entries") is not None:
+                        try:
+                            self._manual_entries = list(last_state.attributes.get("manual_entries", []))
+                        except Exception:
+                            self._manual_entries = []
             except (TypeError, ValueError):
                 self._attr_native_value = 0
         
@@ -1605,13 +1693,51 @@ class PlantTotalWaterConsumption(RestoreSensor):
                     pot_size = self._plant.pot_size.native_value
                     water_capacity = self._plant.water_capacity.native_value / 100  # Convert from % to decimal
                     volume_drop = (total_drop / 100) * pot_size * water_capacity  # Convert from % to L
-                    
-                    self._attr_native_value = round(volume_drop, 2)
+                    total_with_manual = volume_drop + (self._manual_additions or 0.0)
+                    self._attr_native_value = round(total_with_manual, 2)
                     self._last_update = current_time.isoformat()
                     self.async_write_ha_state()
                 
         except (TypeError, ValueError):
             pass
+
+    async def add_manual_watering(self, amount_liters: float, note: str | None = None) -> None:
+        """Add a manual watering amount to the total and persist it."""
+        try:
+            if amount_liters is None:
+                return
+            if amount_liters < 0:
+                amount_liters = 0
+            self._manual_additions = round((self._manual_additions or 0.0) + float(amount_liters), 2)
+            entry = {
+                "timestamp": dt_util.utcnow().isoformat(),
+                "amount_liters": round(float(amount_liters), 2),
+            }
+            if note:
+                entry["note"] = note
+            try:
+                # keep last 50 entries
+                self._manual_entries.append(entry)
+                self._manual_entries = self._manual_entries[-50:]
+            except Exception:
+                self._manual_entries = [entry]
+
+            # Recompute displayed value as current computed + manual additions
+            displayed_value = self._attr_native_value
+            try:
+                displayed_value = float(displayed_value) if displayed_value not in (STATE_UNKNOWN, STATE_UNAVAILABLE, None) else 0.0
+            except (TypeError, ValueError):
+                displayed_value = 0.0
+
+            # If we have pot_size and water_capacity, prefer recomputing after next sensor event
+            # For now, just add to current state as well
+            new_value = round(displayed_value + float(amount_liters), 2)
+            self._attr_native_value = new_value
+            self._last_update = dt_util.utcnow().isoformat()
+            self.async_write_ha_state()
+        except Exception:
+            # Ensure no crash on service call
+            self.async_write_ha_state()
 
 
 class PlantTotalFertilizerConsumption(RestoreSensor):
@@ -1946,3 +2072,18 @@ class PlantCurrentPh(PlantCurrentStatus):
     def device_class(self) -> str:
         """Device class"""
         return DEVICE_CLASS_PH  # Verwende unsere eigene Device Class
+
+    async def set_manual_value(self, value: float) -> None:
+        """Set a manual pH measurement (0-14)."""
+        try:
+            if value is None:
+                return
+            # clamp plausible pH range
+            if value < 0:
+                value = 0
+            if value > 14:
+                value = 14
+            self._attr_native_value = float(value)
+            self.async_write_ha_state()
+        except (TypeError, ValueError):
+            return
