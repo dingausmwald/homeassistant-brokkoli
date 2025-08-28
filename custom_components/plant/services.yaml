@@ -120,6 +120,14 @@ create_plant:
         entity:
           domain: sensor
           device_class: humidity
+    CO2_sensor:
+      name: CO2 Sensor
+      description: CO2 sensor
+      required: false
+      selector:
+        entity:
+          domain: sensor
+          device_class: CO2
     power_consumption_sensor:
       name: Power Consumption Sensor
       description: Energieverbrauchssensor
@@ -246,6 +254,14 @@ clone_plant:
         entity:
           domain: sensor
           device_class: humidity
+    CO2_sensor:
+      name: CO2 Sensor
+      description: CO2 sensor for the clone
+      required: false
+      selector:
+        entity:
+          domain: sensor
+          device_class: CO2
     power_consumption_sensor:
       name: Power Consumption Sensor
       description: Power consumption sensor for the clone

@@ -20,6 +20,7 @@ A Home Assistant integration for monitoring cannabis plants with sensors and con
 - **Conductivity**: Soil conductivity (µS/cm)
 - **pH**: Soil pH level
 - **Humidity**: Air humidity percentage
+- **Co2**: Air CO2 ppm
 - **Power**: Power consumption monitoring
 - **Daily Light Integral (DLI)**: Calculated from light sensors
 

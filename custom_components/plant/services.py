@@ -46,6 +46,7 @@ from .const import (
     FLOW_SENSOR_CONDUCTIVITY,
     FLOW_SENSOR_ILLUMINANCE,
     FLOW_SENSOR_HUMIDITY,
+    FLOW_SENSOR_CO2,
     DEVICE_TYPE_CYCLE,
     DEVICE_TYPE_PLANT,
     SERVICE_CLONE_PLANT,
@@ -90,6 +91,7 @@ CREATE_PLANT_SCHEMA = vol.Schema({
     vol.Optional(FLOW_SENSOR_CONDUCTIVITY): cv.string,
     vol.Optional(FLOW_SENSOR_ILLUMINANCE): cv.string,
     vol.Optional(FLOW_SENSOR_HUMIDITY): cv.string,
+    vol.Optional(FLOW_SENSOR_CO2): cv.string,
     vol.Optional(FLOW_SENSOR_POWER_CONSUMPTION): cv.string,
     vol.Optional(FLOW_SENSOR_PH): cv.string,
 })
@@ -277,6 +279,8 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 plant_info[FLOW_SENSOR_ILLUMINANCE] = call.data[FLOW_SENSOR_ILLUMINANCE]
             if call.data.get(FLOW_SENSOR_HUMIDITY):
                 plant_info[FLOW_SENSOR_HUMIDITY] = call.data[FLOW_SENSOR_HUMIDITY]
+            if call.data.get(FLOW_SENSOR_CO2):
+                plant_info[FLOW_SENSOR_CO2] = call.data[FLOW_SENSOR_CO2]
             if call.data.get(FLOW_SENSOR_POWER_CONSUMPTION):
                 plant_info[FLOW_SENSOR_POWER_CONSUMPTION] = call.data[FLOW_SENSOR_POWER_CONSUMPTION]
             if call.data.get(FLOW_SENSOR_PH):
@@ -299,7 +303,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 # Übernehme die Sensorzuweisungen
                 for sensor_key in [FLOW_SENSOR_TEMPERATURE, FLOW_SENSOR_MOISTURE, FLOW_SENSOR_CONDUCTIVITY, 
                                   FLOW_SENSOR_ILLUMINANCE, FLOW_SENSOR_HUMIDITY, FLOW_SENSOR_POWER_CONSUMPTION,
-                                  FLOW_SENSOR_PH]:
+                                  FLOW_SENSOR_PH, FLOW_SENSOR_CO2]:
                     if sensor_key in plant_info:
                         opb_info[sensor_key] = plant_info[sensor_key]
                 
@@ -445,6 +449,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                     'conductivity': config_data.get("default_conductivity_aggregation", "median"),
                     'illuminance': config_data.get("default_illuminance_aggregation", "mean"),
                     'humidity': config_data.get("default_humidity_aggregation", "mean"),
+                    'CO2': config_data.get("default_CO2_aggregation", "mean"),
                     'ppfd': config_data.get("default_ppfd_aggregation", "original"),
                     'dli': config_data.get("default_dli_aggregation", "original"),
                     'total_integral': config_data.get("default_total_integral_aggregation", "original"),
@@ -766,6 +771,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             FLOW_SENSOR_CONDUCTIVITY,
             FLOW_SENSOR_ILLUMINANCE,
             FLOW_SENSOR_HUMIDITY,
+            FLOW_SENSOR_CO2,
             FLOW_SENSOR_POWER_CONSUMPTION,
             FLOW_SENSOR_PH
         ]
@@ -787,6 +793,8 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             plant_info[FLOW_SENSOR_ILLUMINANCE] = call.data[FLOW_SENSOR_ILLUMINANCE]
         if call.data.get(FLOW_SENSOR_HUMIDITY):
             plant_info[FLOW_SENSOR_HUMIDITY] = call.data[FLOW_SENSOR_HUMIDITY]
+        if call.data.get(FLOW_SENSOR_CO2):
+            plant_info[FLOW_SENSOR_CO2] = call.data[FLOW_SENSOR_CO2]
         if call.data.get(FLOW_SENSOR_POWER_CONSUMPTION):
             plant_info[FLOW_SENSOR_POWER_CONSUMPTION] = call.data[FLOW_SENSOR_POWER_CONSUMPTION]
         if call.data.get(FLOW_SENSOR_PH):
@@ -1646,6 +1654,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             vol.Optional(FLOW_SENSOR_CONDUCTIVITY): cv.entity_id,
             vol.Optional(FLOW_SENSOR_ILLUMINANCE): cv.entity_id,
             vol.Optional(FLOW_SENSOR_HUMIDITY): cv.entity_id,
+            vol.Optional(FLOW_SENSOR_CO2): cv.entity_id,
         }),
         supports_response=SupportsResponse.OPTIONAL
     )
