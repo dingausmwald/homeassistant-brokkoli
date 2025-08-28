@@ -41,6 +41,7 @@ from .const import (
     ATTR_CURRENT,
     ATTR_DLI,
     ATTR_HUMIDITY,
+    ATTR_CO2,
     ATTR_ILLUMINANCE,
     ATTR_LIMITS,
     ATTR_MAX,
@@ -61,6 +62,7 @@ from .const import (
     FLOW_CONDUCTIVITY_TRIGGER,
     FLOW_DLI_TRIGGER,
     FLOW_HUMIDITY_TRIGGER,
+    FLOW_CO2_TRIGGER,
     FLOW_ILLUMINANCE_TRIGGER,
     FLOW_MOISTURE_TRIGGER,
     FLOW_PLANT_INFO,
@@ -73,11 +75,13 @@ from .const import (
     FLOW_SENSOR_CONDUCTIVITY,
     FLOW_SENSOR_ILLUMINANCE,
     FLOW_SENSOR_HUMIDITY,
+    FLOW_SENSOR_CO2,
     FLOW_SENSOR_POWER_CONSUMPTION,
     OPB_DISPLAY_PID,
     READING_CONDUCTIVITY,
     READING_DLI,
     READING_HUMIDITY,
+    READING_CO2,
     READING_ILLUMINANCE,
     READING_MOISTURE,
     READING_TEMPERATURE,
@@ -751,7 +755,9 @@ class PlantDevice(Entity):
         self.max_illuminance = None
         self.min_illuminance = None
         self.max_humidity = None
+        self.max_CO2 = None
         self.min_humidity = None
+        self.min_CO2 = None
         self.max_dli = None
         self.min_dli = None
        
@@ -768,6 +774,7 @@ class PlantDevice(Entity):
         self.sensor_conductivity = None
         self.sensor_illuminance = None
         self.sensor_humidity = None
+        self.sensor_CO2 = None
         self.sensor_power_consumption = None
         self.total_power_consumption = None
 
@@ -786,6 +793,7 @@ class PlantDevice(Entity):
         self.moisture_status = None
         self.temperature_status = None
         self.humidity_status = None
+        self.CO2_status = None
         self.dli_status = None
         self.water_consumption_status = None
         self.fertilizer_consumption_status = None
@@ -933,6 +941,11 @@ class PlantDevice(Entity):
         return self._config.options.get(FLOW_HUMIDITY_TRIGGER, True)
 
     @property
+    def CO2_trigger(self) -> bool:
+        """Whether we will generate alarms based on CO2"""
+        return self._config.options.get(FLOW_CO2_TRIGGER, True)
+
+    @property
     def temperature_trigger(self) -> bool:
         """Whether we will generate alarms based on temperature"""
         return self._config.options.get(FLOW_TEMPERATURE_TRIGGER, True)
@@ -1004,6 +1017,7 @@ class PlantDevice(Entity):
             "conductivity_status": self.conductivity_status,
             "illuminance_status": self.illuminance_status,
             "humidity_status": self.humidity_status,
+            "CO2_status": self.CO2_status,
             "dli_status": self.dli_status,
             "water_consumption_status": self.water_consumption_status,
             "fertilizer_consumption_status": self.fertilizer_consumption_status,
@@ -1108,6 +1122,14 @@ class PlantDevice(Entity):
                 ATTR_ICON: self.sensor_humidity.icon,
                 ATTR_UNIT_OF_MEASUREMENT: self.sensor_humidity.unit_of_measurement,
                 ATTR_SENSOR: self.sensor_humidity.entity_id,
+            },
+            ATTR_CO2: {
+                ATTR_MAX: self.max_CO2.state,
+                ATTR_MIN: self.min_CO2.state,
+                ATTR_CURRENT: self.sensor_CO2.state or STATE_UNAVAILABLE,
+                ATTR_ICON: self.sensor_CO2.icon,
+                ATTR_UNIT_OF_MEASUREMENT: self.sensor_CO2.unit_of_measurement,
+                ATTR_SENSOR: self.sensor_CO2.entity_id,
             },
             ATTR_DLI: {
                 ATTR_MAX: self.max_dli.state,
@@ -1339,12 +1361,14 @@ class PlantDevice(Entity):
             self.max_conductivity,
             self.max_dli,
             self.max_humidity,
+            self.max_CO2,
             self.max_illuminance,
             self.max_moisture,
             self.max_temperature,
             self.min_conductivity,
             self.min_dli,
             self.min_humidity,
+            self.min_CO2,
             self.min_illuminance,
             self.min_moisture,
             self.min_temperature,
@@ -1364,6 +1388,7 @@ class PlantDevice(Entity):
         return [
             self.sensor_conductivity,
             self.sensor_humidity,
+            self.sensor_CO2,
             self.sensor_illuminance,
             self.sensor_moisture,
             self.sensor_temperature,
@@ -1405,6 +1430,8 @@ class PlantDevice(Entity):
         min_illuminance: Entity | None,
         max_humidity: Entity | None,
         min_humidity: Entity | None,
+        max_CO2: Entity | None,
+        min_CO2: Entity | None,
         max_dli: Entity | None,
         min_dli: Entity | None,
         max_water_consumption: Entity | None,
@@ -1427,6 +1454,8 @@ class PlantDevice(Entity):
         self.min_illuminance = min_illuminance
         self.max_humidity = max_humidity
         self.min_humidity = min_humidity
+        self.max_CO2 = max_CO2
+        self.min_CO2 = min_CO2
         self.max_dli = max_dli
         self.min_dli = min_dli
         self.max_water_consumption = max_water_consumption
@@ -1445,6 +1474,7 @@ class PlantDevice(Entity):
         conductivity: Entity | None,
         illuminance: Entity | None,
         humidity: Entity | None,
+        CO2: Entity | None,
         power_consumption: Entity | None,
         ph: Entity | None,  # Neuer Parameter
     ) -> None:
@@ -1454,6 +1484,7 @@ class PlantDevice(Entity):
         self.sensor_conductivity = conductivity
         self.sensor_illuminance = illuminance
         self.sensor_humidity = humidity
+        self.sensor_CO2 = CO2
         self.sensor_power_consumption = power_consumption
         self.sensor_ph = ph  # Neue Zuweisung
 
@@ -1561,6 +1592,21 @@ class PlantDevice(Entity):
                             new_state = STATE_PROBLEM
                     else:
                         self.humidity_status = STATE_OK
+
+            if self.sensor_CO2 is not None:
+                CO2 = self._median_sensors.get('CO2')
+                if CO2 is not None:
+                    known_state = True
+                    if float(CO2) < float(self.min_CO2.state):
+                        self.CO2_status = STATE_LOW
+                        if self.CO2_trigger:
+                            new_state = STATE_PROBLEM
+                    elif float(CO2) > float(self.max_CO2.state):
+                        self.CO2_status = STATE_HIGH
+                        if self.CO2_trigger:
+                            new_state = STATE_PROBLEM
+                    else:
+                        self.CO2_status = STATE_OK
 
             if self.dli is not None:
                 dli = self._median_sensors.get('dli')
@@ -1702,6 +1748,21 @@ class PlantDevice(Entity):
                             new_state = STATE_PROBLEM
                     else:
                         self.humidity_status = STATE_OK
+
+            if self.sensor_CO2 is not None:
+                CO2 = self.sensor_CO2.state
+                if CO2 is not None and CO2 != STATE_UNAVAILABLE and CO2 != STATE_UNKNOWN:
+                    known_state = True
+                    if float(CO2) < float(self.min_CO2.state):
+                        self.CO2_status = STATE_LOW
+                        if self.CO2_trigger:
+                            new_state = STATE_PROBLEM
+                    elif float(CO2) > float(self.max_CO2.state):
+                        self.CO2_status = STATE_HIGH
+                        if self.CO2_trigger:
+                            new_state = STATE_PROBLEM
+                    else:
+                        self.CO2_status = STATE_OK
 
             if self.dli is not None:
                 dli = self.dli.state
@@ -1897,6 +1958,7 @@ class PlantDevice(Entity):
             'conductivity': [], 
             'illuminance': [],
             'humidity': [],
+            'CO2': [],
             'ppfd': [],
             'dli': [],
             'total_integral': [],
@@ -1928,6 +1990,7 @@ class PlantDevice(Entity):
                 'conductivity': plant.sensor_conductivity,
                 'illuminance': plant.sensor_illuminance,
                 'humidity': plant.sensor_humidity,
+                'CO2': plant.sensor_CO2,
                 'ppfd': plant.ppfd,
                 'dli': plant.dli,
                 'total_integral': plant.total_integral,
@@ -1997,7 +2060,7 @@ class PlantDevice(Entity):
                     self._median_sensors[sensor_type] = round(value, 6)  # 6 Nachkommastellen wie bei Plant
                 elif sensor_type in ["ppfd", "dli"]:
                     self._median_sensors[sensor_type] = round(value, 3)  # 3 Nachkommastellen
-                elif sensor_type in ["temperature", "moisture", "humidity", "moisture_consumption"]:
+                elif sensor_type in ["temperature", "moisture", "humidity", "moisture_consumption", "CO2"]:
                     self._median_sensors[sensor_type] = round(value, 1)  # 1 Nachkommastelle
                 else:  # conductivity, illuminance, fertilizer_consumption
                     self._median_sensors[sensor_type] = round(value)  # Keine Nachkommastellen

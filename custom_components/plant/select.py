@@ -78,8 +78,8 @@ class PlantGrowthPhaseSelect(SelectEntity, RestoreEntity):
         GROWTH_PHASE_ROOTING: "rooting_start",
         GROWTH_PHASE_GROWING: "growing_start",
         GROWTH_PHASE_FLOWERING: "flowering_start",
-        GROWTH_PHASE_REMOVED: "removed_date",
-        GROWTH_PHASE_HARVESTED: "harvested_date"
+        GROWTH_PHASE_REMOVED: "removed_start",
+        GROWTH_PHASE_HARVESTED: "harvested_start"
     }
 
     # Mapping für Phasen zu Dauer-Attributen
@@ -124,8 +124,8 @@ class PlantGrowthPhaseSelect(SelectEntity, RestoreEntity):
             "rooting_start": None,
             "growing_start": None,
             "flowering_start": None,
-            "removed_date": None,
-            "harvested_date": None,
+            "removed_start": None,
+            "harvested_start": None,
             # Duration Attributes
             "seeds_duration": None,
             "germination_duration": None,

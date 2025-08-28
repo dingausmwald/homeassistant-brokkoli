@@ -347,7 +347,7 @@
           "name": "Durée de floraison",
           "description": "Durée de la phase de floraison en jours"
         },
-        "harvested_date": {
+        "harvested_start": {
           "name": "Date de récolte",
           "description": "Date de récolte"
         },
@@ -355,7 +355,7 @@
           "name": "Durée depuis récolte",
           "description": "Durée depuis la récolte en jours"
         },
-        "removed_date": {
+        "removed_start": {
           "name": "Date de suppression",
           "description": "Date de suppression"
         },

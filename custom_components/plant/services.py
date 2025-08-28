@@ -46,6 +46,7 @@ from .const import (
     FLOW_SENSOR_CONDUCTIVITY,
     FLOW_SENSOR_ILLUMINANCE,
     FLOW_SENSOR_HUMIDITY,
+    FLOW_SENSOR_CO2,
     DEVICE_TYPE_CYCLE,
     DEVICE_TYPE_PLANT,
     SERVICE_CLONE_PLANT,
@@ -67,6 +68,9 @@ from .const import (
     FLOW_SENSOR_PH,
     SERVICE_EXPORT_PLANTS,
     SERVICE_IMPORT_PLANTS,
+    SERVICE_ADD_WATERING,
+    SERVICE_ADD_CONDUCTIVITY,
+    SERVICE_ADD_PH,
 
 )
 from .plant_helpers import PlantHelper
@@ -90,6 +94,7 @@ CREATE_PLANT_SCHEMA = vol.Schema({
     vol.Optional(FLOW_SENSOR_CONDUCTIVITY): cv.string,
     vol.Optional(FLOW_SENSOR_ILLUMINANCE): cv.string,
     vol.Optional(FLOW_SENSOR_HUMIDITY): cv.string,
+    vol.Optional(FLOW_SENSOR_CO2): cv.string,
     vol.Optional(FLOW_SENSOR_POWER_CONSUMPTION): cv.string,
     vol.Optional(FLOW_SENSOR_PH): cv.string,
 })
@@ -140,6 +145,26 @@ IMPORT_PLANTS_SCHEMA = vol.Schema({
     vol.Optional("new_plant_name"): cv.string,
     vol.Optional("overwrite_existing"): cv.boolean,
     vol.Optional("include_images"): cv.boolean,
+})
+
+
+# Schema for add_watering Service
+ADD_WATERING_SCHEMA = vol.Schema({
+    vol.Required("entity_id"): cv.entity_id,
+    vol.Required("amount_liters"): vol.All(vol.Coerce(float), vol.Range(min=0.0, max=1000.0)),
+    vol.Optional("note"): cv.string,
+})
+
+# Schema for add_conductivity Service
+ADD_CONDUCTIVITY_SCHEMA = vol.Schema({
+    vol.Required("entity_id"): cv.entity_id,
+    vol.Required("value_us_cm"): vol.All(vol.Coerce(float), vol.Range(min=0.0, max=100000.0)),
+})
+
+# Schema for add_ph Service
+ADD_PH_SCHEMA = vol.Schema({
+    vol.Required("entity_id"): cv.entity_id,
+    vol.Required("value"): vol.All(vol.Coerce(float), vol.Range(min=0.0, max=14.0)),
 })
 
 
@@ -277,6 +302,8 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 plant_info[FLOW_SENSOR_ILLUMINANCE] = call.data[FLOW_SENSOR_ILLUMINANCE]
             if call.data.get(FLOW_SENSOR_HUMIDITY):
                 plant_info[FLOW_SENSOR_HUMIDITY] = call.data[FLOW_SENSOR_HUMIDITY]
+            if call.data.get(FLOW_SENSOR_CO2):
+                plant_info[FLOW_SENSOR_CO2] = call.data[FLOW_SENSOR_CO2]
             if call.data.get(FLOW_SENSOR_POWER_CONSUMPTION):
                 plant_info[FLOW_SENSOR_POWER_CONSUMPTION] = call.data[FLOW_SENSOR_POWER_CONSUMPTION]
             if call.data.get(FLOW_SENSOR_PH):
@@ -299,7 +326,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 # Übernehme die Sensorzuweisungen
                 for sensor_key in [FLOW_SENSOR_TEMPERATURE, FLOW_SENSOR_MOISTURE, FLOW_SENSOR_CONDUCTIVITY, 
                                   FLOW_SENSOR_ILLUMINANCE, FLOW_SENSOR_HUMIDITY, FLOW_SENSOR_POWER_CONSUMPTION,
-                                  FLOW_SENSOR_PH]:
+                                  FLOW_SENSOR_PH, FLOW_SENSOR_CO2]:
                     if sensor_key in plant_info:
                         opb_info[sensor_key] = plant_info[sensor_key]
                 
@@ -445,6 +472,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                     'conductivity': config_data.get("default_conductivity_aggregation", "median"),
                     'illuminance': config_data.get("default_illuminance_aggregation", "mean"),
                     'humidity': config_data.get("default_humidity_aggregation", "mean"),
+                    'CO2': config_data.get("default_CO2_aggregation", "mean"),
                     'ppfd': config_data.get("default_ppfd_aggregation", "original"),
                     'dli': config_data.get("default_dli_aggregation", "original"),
                     'total_integral': config_data.get("default_total_integral_aggregation", "original"),
@@ -766,6 +794,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             FLOW_SENSOR_CONDUCTIVITY,
             FLOW_SENSOR_ILLUMINANCE,
             FLOW_SENSOR_HUMIDITY,
+            FLOW_SENSOR_CO2,
             FLOW_SENSOR_POWER_CONSUMPTION,
             FLOW_SENSOR_PH
         ]
@@ -787,6 +816,8 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             plant_info[FLOW_SENSOR_ILLUMINANCE] = call.data[FLOW_SENSOR_ILLUMINANCE]
         if call.data.get(FLOW_SENSOR_HUMIDITY):
             plant_info[FLOW_SENSOR_HUMIDITY] = call.data[FLOW_SENSOR_HUMIDITY]
+        if call.data.get(FLOW_SENSOR_CO2):
+            plant_info[FLOW_SENSOR_CO2] = call.data[FLOW_SENSOR_CO2]
         if call.data.get(FLOW_SENSOR_POWER_CONSUMPTION):
             plant_info[FLOW_SENSOR_POWER_CONSUMPTION] = call.data[FLOW_SENSOR_POWER_CONSUMPTION]
         if call.data.get(FLOW_SENSOR_PH):
@@ -928,8 +959,8 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         growth_phase_attrs = [
             "seeds_start", "seeds_duration", "germination_start", "germination_duration",
             "rooting_start", "rooting_duration", "growing_start", "growing_duration", 
-            "flowering_start", "flower_duration", "harvested_date", "harvested_duration",
-            "removed_date", "removed_duration"
+            "flowering_start", "flower_duration", "harvested_start", "harvested_duration",
+            "removed_start", "removed_duration"
         ]
         
         growth_phase_updates = {}
@@ -1119,6 +1150,122 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             _LOGGER.warning(
                 f"Location Sensor für Pflanze {entity_id} nicht gefunden"
             )
+
+    async def add_watering(call: ServiceCall) -> None:
+        """Add a manual watering entry and update totals."""
+        entity_id = call.data.get("entity_id")
+        amount_liters = call.data.get("amount_liters")
+        note = call.data.get("note")
+
+        if amount_liters is None:
+            return
+
+        # Find target plant/cycle
+        target_plant = None
+        for entry_id in hass.data.get(DOMAIN, {}):
+            if ATTR_PLANT in hass.data[DOMAIN][entry_id]:
+                plant = hass.data[DOMAIN][entry_id][ATTR_PLANT]
+                if plant.entity_id == entity_id:
+                    target_plant = plant
+                    break
+
+        if not target_plant:
+            _LOGGER.warning("Plant entity %s not found for add_watering", entity_id)
+            return
+
+        # Update journal entry (prepend concise log)
+        try:
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+            journal_line = f"{timestamp}: Gegossen {amount_liters} L" + (f" - {note}" if note else "")
+            if hasattr(target_plant, "journal") and target_plant.journal:
+                current = target_plant.journal.state or ""
+                new_text = f"{journal_line}\n{current}" if current else journal_line
+                await target_plant.journal.async_set_value(new_text)
+        except Exception as e:
+            _LOGGER.debug("Could not update journal on add_watering: %s", e)
+
+        # Update total water consumption sensor value via helper method if available
+        try:
+            twc = getattr(target_plant, "total_water_consumption", None)
+            if twc and hasattr(twc, "add_manual_watering"):
+                await twc.add_manual_watering(float(amount_liters), note)
+            elif twc is not None:
+                # Fallback: direct increment
+                current_state = twc.state
+                try:
+                    current_value = float(current_state) if current_state not in (None, "unknown", "unavailable") else 0.0
+                except (TypeError, ValueError):
+                    current_value = 0.0
+                twc._attr_native_value = round(current_value + float(amount_liters), 2)
+                try:
+                    twc._last_update = datetime.utcnow().isoformat()
+                except Exception:
+                    pass
+                twc.async_write_ha_state()
+            else:
+                _LOGGER.warning("total_water_consumption sensor not available for %s", entity_id)
+        except Exception as e:
+            _LOGGER.error("Error updating total water consumption on add_watering: %s", e)
+
+    async def add_conductivity(call: ServiceCall) -> None:
+        """Add a manual EC measurement (uS/cm) to the current conductivity sensor."""
+        entity_id = call.data.get("entity_id")
+        value = call.data.get("value_us_cm")
+        if value is None:
+            return
+        # Find target plant
+        target_plant = None
+        for entry_id in hass.data.get(DOMAIN, {}):
+            if ATTR_PLANT in hass.data[DOMAIN][entry_id]:
+                plant = hass.data[DOMAIN][entry_id][ATTR_PLANT]
+                if plant.entity_id == entity_id:
+                    target_plant = plant
+                    break
+        if not target_plant or not getattr(target_plant, "sensor_conductivity", None):
+            _LOGGER.warning("Conductivity sensor not available for %s", entity_id)
+            return
+        sensor = target_plant.sensor_conductivity
+        if hasattr(sensor, "set_manual_value"):
+            await sensor.set_manual_value(float(value))
+        else:
+            try:
+                sensor._attr_native_value = float(value)
+                sensor.async_write_ha_state()
+            except Exception:
+                pass
+
+    async def add_ph(call: ServiceCall) -> None:
+        """Add a manual pH measurement to the current pH sensor."""
+        entity_id = call.data.get("entity_id")
+        value = call.data.get("value")
+        if value is None:
+            return
+        # Find target plant
+        target_plant = None
+        for entry_id in hass.data.get(DOMAIN, {}):
+            if ATTR_PLANT in hass.data[DOMAIN][entry_id]:
+                plant = hass.data[DOMAIN][entry_id][ATTR_PLANT]
+                if plant.entity_id == entity_id:
+                    target_plant = plant
+                    break
+        if not target_plant or not getattr(target_plant, "sensor_ph", None):
+            # sensor_ph is stored via add_sensors as 'ph'
+            sensor = None
+            if target_plant and hasattr(target_plant, "ph"):
+                sensor = target_plant.ph
+        else:
+            sensor = target_plant.sensor_ph
+        if not sensor:
+            _LOGGER.warning("pH sensor not available for %s", entity_id)
+            return
+        if hasattr(sensor, "set_manual_value"):
+            await sensor.set_manual_value(float(value))
+        else:
+            try:
+                sensor._attr_native_value = float(value)
+                sensor.async_write_ha_state()
+            except Exception:
+                pass
 
     async def export_plants(call: ServiceCall) -> ServiceResponse:
         """Export selected plant configurations to a ZIP archive."""
@@ -1611,9 +1758,9 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         vol.Optional("growing_duration"): cv.positive_int,
         vol.Optional("flowering_start"): cv.string,
         vol.Optional("flower_duration"): cv.positive_int,
-        vol.Optional("harvested_date"): cv.string,
+        vol.Optional("harvested_start"): cv.string,
         vol.Optional("harvested_duration"): cv.positive_int,
-        vol.Optional("removed_date"): cv.string,
+        vol.Optional("removed_start"): cv.string,
         vol.Optional("removed_duration"): cv.positive_int,
     })
 
@@ -1646,6 +1793,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             vol.Optional(FLOW_SENSOR_CONDUCTIVITY): cv.entity_id,
             vol.Optional(FLOW_SENSOR_ILLUMINANCE): cv.entity_id,
             vol.Optional(FLOW_SENSOR_HUMIDITY): cv.entity_id,
+            vol.Optional(FLOW_SENSOR_CO2): cv.entity_id,
         }),
         supports_response=SupportsResponse.OPTIONAL
     )
@@ -1663,6 +1811,26 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         SERVICE_ADD_IMAGE,
         add_image,
         schema=ADD_IMAGE_SCHEMA
+    )
+    
+    # Register add_watering service
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_ADD_WATERING,
+        add_watering,
+        schema=ADD_WATERING_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_ADD_CONDUCTIVITY,
+        add_conductivity,
+        schema=ADD_CONDUCTIVITY_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_ADD_PH,
+        add_ph,
+        schema=ADD_PH_SCHEMA,
     )
     
     # Register export/import services
@@ -1694,6 +1862,9 @@ async def async_unload_services(hass: HomeAssistant) -> None:
     hass.services.async_remove(DOMAIN, SERVICE_REMOVE_CYCLE)
     hass.services.async_remove(DOMAIN, SERVICE_MOVE_TO_AREA)
     hass.services.async_remove(DOMAIN, SERVICE_ADD_IMAGE)
+    hass.services.async_remove(DOMAIN, SERVICE_ADD_WATERING)
+    hass.services.async_remove(DOMAIN, SERVICE_ADD_CONDUCTIVITY)
+    hass.services.async_remove(DOMAIN, SERVICE_ADD_PH)
     hass.services.async_remove(DOMAIN, SERVICE_CHANGE_POSITION) 
     hass.services.async_remove(DOMAIN, SERVICE_EXPORT_PLANTS)
     hass.services.async_remove(DOMAIN, SERVICE_IMPORT_PLANTS)

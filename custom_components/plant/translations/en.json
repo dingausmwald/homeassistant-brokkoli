@@ -347,7 +347,7 @@
           "name": "Flower Duration",
           "description": "Duration of flowering phase in days"
         },
-        "harvested_date": {
+        "harvested_start": {
           "name": "Harvested Date",
           "description": "Date of harvest"
         },
@@ -355,7 +355,7 @@
           "name": "Harvested Duration",
           "description": "Duration since harvest in days"
         },
-        "removed_date": {
+        "removed_start": {
           "name": "Removed Date",
           "description": "Date of removal"
         },

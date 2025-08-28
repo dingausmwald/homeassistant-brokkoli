@@ -347,7 +347,7 @@
           "name": "Blüte-Dauer",
           "description": "Dauer der Blüte-Phase in Tagen"
         },
-        "harvested_date": {
+        "harvested_start": {
           "name": "Ernte-Datum",
           "description": "Datum der Ernte"
         },
@@ -355,7 +355,7 @@
           "name": "Ernte-Dauer",
           "description": "Dauer seit der Ernte in Tagen"
         },
-        "removed_date": {
+        "removed_start": {
           "name": "Entfernt-Datum",
           "description": "Datum der Entfernung"
         },

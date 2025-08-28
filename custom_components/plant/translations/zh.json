@@ -347,7 +347,7 @@
           "name": "开花持续时间",
           "description": "开花阶段持续时间（天）"
         },
-        "harvested_date": {
+        "harvested_start": {
           "name": "收获日期",
           "description": "收获日期"
         },
@@ -355,7 +355,7 @@
           "name": "收获后持续时间",
           "description": "收获后持续时间（天）"
         },
-        "removed_date": {
+        "removed_start": {
           "name": "移除日期",
           "description": "移除日期"
         },

@@ -51,6 +51,8 @@ from .plant_thresholds import (
     PlantMinIlluminance,
     PlantMaxHumidity,
     PlantMinHumidity,
+    PlantMaxCO2,
+    PlantMinCO2,
     PlantMaxDli,
     PlantMinDli,
     PlantMaxWaterConsumption,
@@ -110,6 +112,8 @@ async def async_setup_entry(
     min_illuminance = PlantMinIlluminance(hass, entry, plant)
     max_humidity = PlantMaxHumidity(hass, entry, plant)
     min_humidity = PlantMinHumidity(hass, entry, plant)
+    max_CO2 = PlantMaxCO2(hass, entry, plant)
+    min_CO2 = PlantMinCO2(hass, entry, plant)
     max_dli = PlantMaxDli(hass, entry, plant)
     min_dli = PlantMinDli(hass, entry, plant)
 
@@ -140,6 +144,8 @@ async def async_setup_entry(
         min_illuminance,
         max_humidity,
         min_humidity,
+        max_CO2,
+        min_CO2,
         max_dli,
         min_dli,
         max_water_consumption,
@@ -170,6 +176,8 @@ async def async_setup_entry(
         min_illuminance=min_illuminance,
         max_humidity=max_humidity,
         min_humidity=min_humidity,
+        max_CO2=max_CO2,
+        min_CO2=min_CO2,
         max_dli=max_dli,
         min_dli=min_dli,
         max_water_consumption=max_water_consumption,
