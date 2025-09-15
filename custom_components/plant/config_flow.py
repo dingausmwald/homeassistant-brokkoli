@@ -719,6 +719,7 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 for key in (
                     FLOW_SENSOR_ILLUMINANCE,
                     FLOW_SENSOR_HUMIDITY,
+                    FLOW_SENSOR_MOISTURE,
                     FLOW_SENSOR_CO2,
                     FLOW_SENSOR_POWER_CONSUMPTION,
                     FLOW_SENSOR_PH,
@@ -1081,6 +1082,14 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 {
                     ATTR_ENTITY: {
                         ATTR_DEVICE_CLASS: SensorDeviceClass.HUMIDITY,
+                        ATTR_DOMAIN: DOMAIN_SENSOR,
+                    }
+                }
+            ),
+            vol.Optional(FLOW_SENSOR_MOISTURE): selector(
+                {
+                    ATTR_ENTITY: {
+                        ATTR_DEVICE_CLASS: SensorDeviceClass.MOISTURE,
                         ATTR_DOMAIN: DOMAIN_SENSOR,
                     }
                 }

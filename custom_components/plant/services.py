@@ -178,6 +178,7 @@ CREATE_TENT_SCHEMA = vol.Schema({
     vol.Required(ATTR_NAME): cv.string,
     vol.Optional(FLOW_SENSOR_ILLUMINANCE): cv.entity_id,
     vol.Optional(FLOW_SENSOR_HUMIDITY): cv.entity_id,
+    vol.Optional(FLOW_SENSOR_MOISTURE): cv.entity_id,
     vol.Optional(FLOW_SENSOR_CO2): cv.entity_id,
     vol.Optional(FLOW_SENSOR_POWER_CONSUMPTION): cv.entity_id,
     vol.Optional(FLOW_SENSOR_PH): cv.entity_id,
@@ -2144,7 +2145,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 }
                 
                 # Add sensor information
-                for key in [FLOW_SENSOR_ILLUMINANCE, FLOW_SENSOR_HUMIDITY, FLOW_SENSOR_CO2, 
+                for key in [FLOW_SENSOR_ILLUMINANCE, FLOW_SENSOR_HUMIDITY, FLOW_SENSOR_MOISTURE, FLOW_SENSOR_CO2, 
                            FLOW_SENSOR_POWER_CONSUMPTION, FLOW_SENSOR_PH]:
                     if plant_info.get(key):
                         tent_data["sensors"].append({
