@@ -2164,6 +2164,25 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         SERVICE_LIST_TENTS_LOCAL,
         list_tents,
         schema=LIST_TENTS_SCHEMA,
+    )
+
+    # Define the service to add a tent
+    SERVICE_ADD_TENT_LOCAL = "add_tent"
+
+    def add_tent(call):
+        tent_info = {}
+
+        # Store typed sensor fields if provided
+        for key in (
+            FLOW_SENSOR_ILLUMINANCE,
+            FLOW_SENSOR_HUMIDITY,
+            FLOW_SENSOR_MOISTURE,
+            FLOW_SENSOR_CO2,
+            FLOW_SENSOR_POWER_CONSUMPTION,
+            FLOW_SENSOR_PH,
+        ):
+            if call.data.get(key):
+                tent_info[key] = call.data[key]
         supports_response=SupportsResponse.OPTIONAL
     )
 

@@ -822,51 +822,6 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                                 }
                             }
                         ),
-                        vol.Optional(FLOW_SENSOR_ILLUMINANCE): selector(
-                            {
-                                ATTR_ENTITY: {
-                                    ATTR_DEVICE_CLASS: SensorDeviceClass.ILLUMINANCE,
-                                    ATTR_DOMAIN: DOMAIN_SENSOR,
-                                }
-                            }
-                        ),
-                        vol.Optional(FLOW_SENSOR_HUMIDITY): selector(
-                            {
-                                ATTR_ENTITY: {
-                                    ATTR_DEVICE_CLASS: SensorDeviceClass.HUMIDITY,
-                                    ATTR_DOMAIN: DOMAIN_SENSOR,
-                                }
-                            }
-                        ),
-                        vol.Optional(FLOW_SENSOR_CO2): selector(
-                            {
-                                ATTR_ENTITY: {
-                                    ATTR_DEVICE_CLASS: SensorDeviceClass.CO2,
-                                    ATTR_DOMAIN: DOMAIN_SENSOR,
-                                }
-                            }
-                        ),
-                        vol.Optional(
-                            FLOW_SENSOR_POWER_CONSUMPTION,
-                            description={"name": "Total Power Consumption Sensor"},
-                        ): selector(
-                            {
-                                ATTR_ENTITY: {
-                                    ATTR_DEVICE_CLASS: SensorDeviceClass.ENERGY,
-                                    ATTR_DOMAIN: DOMAIN_SENSOR,
-                                }
-                            }
-                        ),
-                        vol.Optional(
-                            FLOW_SENSOR_PH, description={"name": "Soil pH Sensor"}
-                        ): selector(
-                            {
-                                ATTR_ENTITY: {
-                                    ATTR_DEVICE_CLASS: SensorDeviceClass.PH,
-                                    ATTR_DOMAIN: DOMAIN_SENSOR,
-                                }
-                            }
-                        ),
                         vol.Optional(
                             ATTR_NORMALIZE_MOISTURE,
                             default=config_data.get("default_normalize_moisture", False),
@@ -1070,6 +1025,7 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     }
                 }
             ),
+            # Typed sensor selectors
             vol.Optional(FLOW_SENSOR_ILLUMINANCE): selector(
                 {
                     ATTR_ENTITY: {
@@ -1082,14 +1038,6 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 {
                     ATTR_ENTITY: {
                         ATTR_DEVICE_CLASS: SensorDeviceClass.HUMIDITY,
-                        ATTR_DOMAIN: DOMAIN_SENSOR,
-                    }
-                }
-            ),
-            vol.Optional(FLOW_SENSOR_MOISTURE): selector(
-                {
-                    ATTR_ENTITY: {
-                        ATTR_DEVICE_CLASS: SensorDeviceClass.MOISTURE,
                         ATTR_DOMAIN: DOMAIN_SENSOR,
                     }
                 }
