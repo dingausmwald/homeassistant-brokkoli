@@ -921,6 +921,9 @@ class PlantDevice(Entity):
         # Neue Property für Location History
         self.location_history = None
 
+        # Neue Property für Tent Select
+        self.tent_select = None
+
         # Neue Property für Pot Size
         self.pot_size = None
         
@@ -2039,6 +2042,10 @@ class PlantDevice(Entity):
     def add_cycle_select(self, cycle_select: Entity) -> None:
         """Add the cycle select entity."""
         self.cycle_select = cycle_select
+
+    def add_tent_select(self, tent_select: Entity) -> None:
+        """Add the tent select entity."""
+        self.tent_select = tent_select
 
     def add_flowering_duration(self, flowering_duration: Entity) -> None:
         """Füge die Blütedauer Number Entity hinzu."""

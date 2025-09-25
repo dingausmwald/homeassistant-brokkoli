@@ -68,6 +68,10 @@ async def async_setup_entry(
         if plant.device_type == DEVICE_TYPE_PLANT:
             cycle_select = PlantCycleSelect(hass, entry, plant)
             entities.append(cycle_select)
+            
+            # Tent Select nur für Plants
+            tent_select = PlantTentSelect(hass, entry, plant)
+            entities.append(tent_select)
     else:
         # Für Tents erstellen wir einen Maintenance Select
         from .tent_select import TentMaintenanceSelect
@@ -588,3 +592,127 @@ class PlantTreatmentSelect(SelectEntity, RestoreEntity):
 
         # Starte den Reset-Timer
         asyncio.create_task(reset_treatment())
+
+
+class PlantTentSelect(SelectEntity, RestoreEntity):
+    """Select entity to assign a plant to a tent."""
+
+    def __init__(self, hass: HomeAssistant, config: ConfigEntry, plant_device) -> None:
+        """Initialize the tent select entity."""
+        self._hass = hass
+        self._config = config
+        self._plant = plant_device
+        self._attr_name = f"{plant_device.name} Tent"
+        self._attr_unique_id = f"{config.entry_id}-tent-select"
+        self._attr_options = []
+        self._tent_mapping = {}
+        self._attr_current_option = None
+        self._update_tent_options()  # Initial update
+
+    @property
+    def device_info(self) -> dict:
+        """Return device info."""
+        return {
+            "identifiers": {(DOMAIN, self._plant.unique_id)},
+        }
+
+    async def async_added_to_hass(self) -> None:
+        """Handle entity which will be added."""
+        await super().async_added_to_hass()
+        
+        # Prüfe ob es eine Neuerstellung ist
+        if self._config.data[FLOW_PLANT_INFO].get(ATTR_IS_NEW_PLANT, False):
+            # Neue Plant - initialisiere ohne Tent
+            self._attr_current_option = ""
+        else:
+            # Neustart - stelle letzten Zustand wieder her
+            last_state = await self.async_get_last_state()
+            if last_state:
+                # Prüfe ob die letzte Option noch verfügbar ist
+                if last_state.state in self._attr_options:
+                    self._attr_current_option = last_state.state
+                else:
+                    # Setze auf aktuellen Tent basierend auf Device Registry
+                    self._attr_current_option = self.current_option or ""
+
+        # Füge den Select zum Plant Device hinzu
+        self._plant.add_tent_select(self)
+
+    @property
+    def current_option(self) -> str | None:
+        """Return the current selected tent."""
+        # Prüfe ob die Plant bereits einem Tent zugeordnet ist
+        tent_id = self._plant._tent_id
+        if tent_id:
+            # Suche den Tent Namen anhand der ID
+            for option, tent_entity_id in self._tent_mapping.items():
+                # Extrahiere die Tent ID aus der Entity ID
+                if tent_entity_id:
+                    # Hole den Tent aus den Hass Daten um den Namen zu erhalten
+                    for entry_id in self._hass.data.get(DOMAIN, {}):
+                        if ATTR_PLANT in self._hass.data[DOMAIN][entry_id]:
+                            tent = self._hass.data[DOMAIN][entry_id][ATTR_PLANT]
+                            if hasattr(tent, 'tent_id') and tent.tent_id == tent_id.replace("tent_", ""):
+                                return f"{tent.name} ({tent.tent_id})"
+        return None
+
+    def _update_tent_options(self) -> None:
+        """Update the list of available tents."""
+        _LOGGER.debug("_update_tent_options called for %s", self.entity_id)
+        
+        tents = []
+        # Finde alle Tent Devices in hass.data
+        for entry_id in self._hass.data.get(DOMAIN, {}):
+            if ATTR_PLANT in self._hass.data[DOMAIN][entry_id]:
+                plant = self._hass.data[DOMAIN][entry_id][ATTR_PLANT]
+                if hasattr(plant, 'device_type') and plant.device_type == DEVICE_TYPE_TENT:
+                    # Hole die Entity ID für diesen Tent
+                    entity_registry = er.async_get(self._hass)
+                    entity_entry = entity_registry.async_get_entity_id(DOMAIN, DOMAIN, plant.unique_id)
+                    if entity_entry:
+                        tents.append((
+                            plant.name,
+                            plant.tent_id,
+                            entity_entry
+                        ))
+                        _LOGGER.debug("Found tent: %s (%s)", plant.name, plant.tent_id)
+
+        # Sortiere nach ID und erstelle Optionen
+        tents.sort(key=lambda x: x[1])
+        self._attr_options = [""] + [f"{name} ({tid})" for name, tid, _ in tents]
+        self._tent_mapping = {
+            f"{name} ({tid})": entity_id for name, tid, entity_id in tents
+        }
+        _LOGGER.debug("Updated tent options to: %s", self._attr_options)
+
+    async def async_select_option(self, option: str) -> None:
+        """Handle tent selection."""
+        if option == self.current_option:
+            return
+
+        if option:
+            # Extrahiere den Tent Namen aus der Option
+            tent_name = option.split(" (")[0] if " (" in option else option
+            await self._hass.services.async_call(
+                DOMAIN,
+                "change_tent",
+                {
+                    "entity_id": self._plant.entity_id,
+                    "tent_name": tent_name
+                },
+                blocking=True
+            )
+        else:
+            # Entferne Tent Zuweisung
+            await self._hass.services.async_call(
+                DOMAIN,
+                "change_tent",
+                {
+                    "entity_id": self._plant.entity_id,
+                    "tent_id": None
+                },
+                blocking=True
+            )
+
+        # Aktualisiere die Optionen nach der Auswahl
+        self._update_tent_options()
