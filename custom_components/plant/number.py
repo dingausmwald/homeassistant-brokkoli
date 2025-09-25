@@ -144,11 +144,12 @@ async def async_setup_entry(
     
     async_add_entities(entities)
     
-    # Add entities to plant device
-    plant.add_pot_size(pot_size)
-    plant.add_water_capacity(water_capacity)
-    plant.add_flowering_duration(flowering_duration)
-    plant.add_health_number(health_number)
+    # Add entities to plant device - nur für Plants und Cycles, nicht für Tents
+    if plant.device_type != DEVICE_TYPE_TENT:
+        plant.add_pot_size(pot_size)
+        plant.add_water_capacity(water_capacity)
+        plant.add_flowering_duration(flowering_duration)
+        plant.add_health_number(health_number)
     
     # Thresholds nur für Plants und Cycles hinzufügen
     if plant.device_type != DEVICE_TYPE_TENT:
