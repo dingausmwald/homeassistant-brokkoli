@@ -847,7 +847,7 @@ class PlantDevice(Entity):
 
         # Tent assignment
         self._assigned_tent = None
-        self._tent_id = None
+        self._tent_id = self._plant_info.get("tent_id", None)
 
         self.flowering_duration = None
 
@@ -2172,7 +2172,30 @@ class PlantDevice(Entity):
     def change_tent(self, tent_entity) -> None:
         """Change the tent assignment for this plant."""
         self._assigned_tent = tent_entity
-        self._tent_id = tent_entity.unique_id if tent_entity else None
+        if tent_entity:
+            # Extract just the tent_id from the unique_id (which is formatted as "tent_{tent_id}")
+            unique_id = tent_entity.unique_id
+            if unique_id.startswith("tent_"):
+                self._tent_id = unique_id[5:]  # Remove "tent_" prefix
+            else:
+                self._tent_id = unique_id
+            
+            # Update the tent_id in the plant_info
+            data = dict(self._config.data)
+            plant_info = dict(data.get(FLOW_PLANT_INFO, {}))
+            plant_info["tent_id"] = self._tent_id
+            data[FLOW_PLANT_INFO] = plant_info
+            self._hass.config_entries.async_update_entry(self._config, data=data)
+        else:
+            self._tent_id = None
+            
+            # Remove the tent_id from the plant_info
+            data = dict(self._config.data)
+            plant_info = dict(data.get(FLOW_PLANT_INFO, {}))
+            if "tent_id" in plant_info:
+                del plant_info["tent_id"]
+            data[FLOW_PLANT_INFO] = plant_info
+            self._hass.config_entries.async_update_entry(self._config, data=data)
         
         # If no tent is assigned, clear the sensor mappings
         if not tent_entity:
