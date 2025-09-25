@@ -79,16 +79,43 @@ async def async_setup_entry(
     
     entities = []
     
-    # Helper Numbers - für alle Device Types
-    pot_size = PotSizeNumber(hass, entry, plant)
-    water_capacity = WaterCapacityNumber(hass, entry, plant)
-    flowering_duration = FloweringDurationNumber(hass, entry, plant)
-    health_number = PlantHealthNumber(hass, entry, plant)
+    # Initialize variables for all device types
+    pot_size = None
+    water_capacity = None
+    flowering_duration = None
+    health_number = None
+    max_moisture = None
+    min_moisture = None
+    max_temperature = None
+    min_temperature = None
+    max_conductivity = None
+    min_conductivity = None
+    max_illuminance = None
+    min_illuminance = None
+    max_humidity = None
+    min_humidity = None
+    max_CO2 = None
+    min_CO2 = None
+    max_dli = None
+    min_dli = None
+    max_water_consumption = None
+    min_water_consumption = None
+    max_fertilizer_consumption = None
+    min_fertilizer_consumption = None
+    max_power_consumption = None
+    min_power_consumption = None
+    max_ph = None
+    min_ph = None
     
-    entities.extend([pot_size, water_capacity, flowering_duration, health_number])
-    
-    # Min/Max Thresholds und Consumption Thresholds nur für Plants und Cycles, nicht für Tents
+    # Helper Numbers - nur für Plants und Cycles, nicht für Tents
     if plant.device_type != DEVICE_TYPE_TENT:
+        pot_size = PotSizeNumber(hass, entry, plant)
+        water_capacity = WaterCapacityNumber(hass, entry, plant)
+        flowering_duration = FloweringDurationNumber(hass, entry, plant)
+        health_number = PlantHealthNumber(hass, entry, plant)
+        
+        entities.extend([pot_size, water_capacity, flowering_duration, health_number])
+        
         # Min/Max Thresholds
         max_moisture = PlantMaxMoisture(hass, entry, plant)
         min_moisture = PlantMinMoisture(hass, entry, plant)
@@ -150,9 +177,8 @@ async def async_setup_entry(
         plant.add_water_capacity(water_capacity)
         plant.add_flowering_duration(flowering_duration)
         plant.add_health_number(health_number)
-    
-    # Thresholds nur für Plants und Cycles hinzufügen
-    if plant.device_type != DEVICE_TYPE_TENT:
+        
+        # Thresholds nur für Plants und Cycles hinzufügen
         plant.add_thresholds(
             max_moisture=max_moisture,
             min_moisture=min_moisture,
