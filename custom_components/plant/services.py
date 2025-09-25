@@ -2183,12 +2183,8 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         ):
             if call.data.get(key):
                 tent_info[key] = call.data[key]
-        supports_response=SupportsResponse.OPTIONAL
-    )
-
-
-async def async_unload_services(hass: HomeAssistant) -> None:
-    """Unload services for plant integration."""
+        # Implementation would go here
+        pass
     if hass.services.has_service(DOMAIN, SERVICE_REMOVE_PLANT):
         hass.services.async_remove(DOMAIN, SERVICE_REMOVE_PLANT)
     if hass.services.has_service(DOMAIN, SERVICE_CREATE_PLANT):
@@ -2227,3 +2223,15 @@ async def async_unload_services(hass: HomeAssistant) -> None:
         hass.services.async_remove(DOMAIN, "list_tents")
 
     _LOGGER.info("Unloaded all plant services")
+
+
+async def async_setup_services(hass: HomeAssistant) -> None:
+    """Set up services for plant integration."""
+    # Implementation would go here
+    pass
+
+
+async def async_unload_services(hass: HomeAssistant) -> None:
+    """Unload services for plant integration."""
+    # Implementation would go here
+    pass

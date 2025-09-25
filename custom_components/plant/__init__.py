@@ -1245,8 +1245,8 @@ class PlantDevice(Entity):
             
             # Ursprüngliche Sensor-Info beibehalten - Verwende native_value anstelle von state
             ATTR_TEMPERATURE: {
-                ATTR_MAX: self.max_temperature.state if self.max_temperature else None,
-                ATTR_MIN: self.min_temperature.state if self.min_temperature else None,
+                ATTR_MAX: self.max_temperature.native_value if self.max_temperature else None,
+                ATTR_MIN: self.min_temperature.native_value if self.min_temperature else None,
                 ATTR_CURRENT: (
                     self._apply_rounding("temperature", self.sensor_temperature.native_value)
                     if self.sensor_temperature and self.sensor_temperature.native_value not in (STATE_UNKNOWN, STATE_UNAVAILABLE, None)
@@ -1258,8 +1258,8 @@ class PlantDevice(Entity):
                 ATTR_SENSOR: self.sensor_temperature.entity_id if self.sensor_temperature else None,
             },
             ATTR_ILLUMINANCE: {
-                ATTR_MAX: self.max_illuminance.state if self.max_illuminance else None,
-                ATTR_MIN: self.min_illuminance.state if self.min_illuminance else None,
+                ATTR_MAX: self.max_illuminance.native_value if self.max_illuminance else None,
+                ATTR_MIN: self.min_illuminance.native_value if self.min_illuminance else None,
                 ATTR_CURRENT: (
                     self._apply_rounding("illuminance", self.sensor_illuminance.native_value)
                     if self.sensor_illuminance and self.sensor_illuminance.native_value not in (STATE_UNKNOWN, STATE_UNAVAILABLE, None)
@@ -1271,8 +1271,8 @@ class PlantDevice(Entity):
                 ATTR_SENSOR: self.sensor_illuminance.entity_id if self.sensor_illuminance else None,
             },
             ATTR_MOISTURE: {
-                ATTR_MAX: self.max_moisture.state if self.max_moisture else None,
-                ATTR_MIN: self.min_moisture.state if self.min_moisture else None,
+                ATTR_MAX: self.max_moisture.native_value if self.max_moisture else None,
+                ATTR_MIN: self.min_moisture.native_value if self.min_moisture else None,
                 ATTR_CURRENT: (
                     self._apply_rounding("moisture", self.sensor_moisture.native_value)
                     if self.sensor_moisture and self.sensor_moisture.native_value not in (STATE_UNKNOWN, STATE_UNAVAILABLE, None)
@@ -1284,8 +1284,8 @@ class PlantDevice(Entity):
                 ATTR_SENSOR: self.sensor_moisture.entity_id if self.sensor_moisture else None,
             },
             ATTR_CONDUCTIVITY: {
-                ATTR_MAX: self.max_conductivity.state if self.max_conductivity else None,
-                ATTR_MIN: self.min_conductivity.state if self.min_conductivity else None,
+                ATTR_MAX: self.max_conductivity.native_value if self.max_conductivity else None,
+                ATTR_MIN: self.min_conductivity.native_value if self.min_conductivity else None,
                 ATTR_CURRENT: (
                     self._apply_rounding("conductivity", self.sensor_conductivity.native_value)
                     if self.sensor_conductivity and self.sensor_conductivity.native_value not in (STATE_UNKNOWN, STATE_UNAVAILABLE, None)
@@ -1297,8 +1297,8 @@ class PlantDevice(Entity):
                 ATTR_SENSOR: self.sensor_conductivity.entity_id if self.sensor_conductivity else None,
             },
             ATTR_HUMIDITY: {
-                ATTR_MAX: self.max_humidity.state if self.max_humidity else None,
-                ATTR_MIN: self.min_humidity.state if self.min_humidity else None,
+                ATTR_MAX: self.max_humidity.native_value if self.max_humidity else None,
+                ATTR_MIN: self.min_humidity.native_value if self.min_humidity else None,
                 ATTR_CURRENT: (
                     self._apply_rounding("humidity", self.sensor_humidity.native_value)
                     if self.sensor_humidity and self.sensor_humidity.native_value not in (STATE_UNKNOWN, STATE_UNAVAILABLE, None)
@@ -1310,8 +1310,8 @@ class PlantDevice(Entity):
                 ATTR_SENSOR: self.sensor_humidity.entity_id if self.sensor_humidity else None,
             },
             ATTR_CO2: {
-                ATTR_MAX: self.max_CO2.state if self.max_CO2 else None,
-                ATTR_MIN: self.min_CO2.state if self.min_CO2 else None,
+                ATTR_MAX: self.max_CO2.native_value if self.max_CO2 else None,
+                ATTR_MIN: self.min_CO2.native_value if self.min_CO2 else None,
                 ATTR_CURRENT: (
                     self._apply_rounding("CO2", self.sensor_CO2.native_value)
                     if self.sensor_CO2 and self.sensor_CO2.native_value not in (STATE_UNKNOWN, STATE_UNAVAILABLE, None)
@@ -1323,8 +1323,8 @@ class PlantDevice(Entity):
                 ATTR_SENSOR: self.sensor_CO2.entity_id if self.sensor_CO2 else None,
             },
             ATTR_DLI: {
-                ATTR_MAX: self.max_dli.state if self.max_dli else None,
-                ATTR_MIN: self.min_dli.state if self.min_dli else None,
+                ATTR_MAX: self.max_dli.native_value if self.max_dli else None,
+                ATTR_MIN: self.min_dli.native_value if self.min_dli else None,
                 ATTR_CURRENT: (
                     self._apply_rounding("dli", self.dli.native_value)
                     if self.dli and self.dli.native_value not in (STATE_UNKNOWN, STATE_UNAVAILABLE, None)
@@ -1336,8 +1336,8 @@ class PlantDevice(Entity):
                 ATTR_SENSOR: self.dli.entity_id if self.dli else None,
             },
             ATTR_WATER_CONSUMPTION: {
-                ATTR_MAX: self.max_water_consumption.state if self.max_water_consumption else None,
-                ATTR_MIN: self.min_water_consumption.state if self.min_water_consumption else None,
+                ATTR_MAX: self.max_water_consumption.native_value if self.max_water_consumption else None,
+                ATTR_MIN: self.min_water_consumption.native_value if self.min_water_consumption else None,
                 ATTR_CURRENT: (
                     self._apply_rounding("moisture_consumption", self.moisture_consumption.native_value)
                     if self.moisture_consumption and self.moisture_consumption.native_value not in (STATE_UNKNOWN, STATE_UNAVAILABLE, None)
@@ -1349,8 +1349,8 @@ class PlantDevice(Entity):
                 ATTR_SENSOR: self.moisture_consumption.entity_id if self.moisture_consumption else None,
             },
             ATTR_FERTILIZER_CONSUMPTION: {
-                ATTR_MAX: self.max_fertilizer_consumption.state if self.max_fertilizer_consumption else None,
-                ATTR_MIN: self.min_fertilizer_consumption.state if self.min_fertilizer_consumption else None,
+                ATTR_MAX: self.max_fertilizer_consumption.native_value if self.max_fertilizer_consumption else None,
+                ATTR_MIN: self.min_fertilizer_consumption.native_value if self.min_fertilizer_consumption else None,
                 ATTR_CURRENT: (
                     self._apply_rounding("fertilizer_consumption", self.fertilizer_consumption.native_value)
                     if self.fertilizer_consumption and self.fertilizer_consumption.native_value not in (STATE_UNKNOWN, STATE_UNAVAILABLE, None)
@@ -1362,8 +1362,8 @@ class PlantDevice(Entity):
                 ATTR_SENSOR: self.fertilizer_consumption.entity_id if self.fertilizer_consumption else None,
             },
             ATTR_POWER_CONSUMPTION: {
-                ATTR_MAX: self.max_power_consumption.state if self.max_power_consumption else None,
-                ATTR_MIN: self.min_power_consumption.state if self.min_power_consumption else None,
+                ATTR_MAX: self.max_power_consumption.native_value if self.max_power_consumption else None,
+                ATTR_MIN: self.min_power_consumption.native_value if self.min_power_consumption else None,
                 ATTR_CURRENT: (
                     self._apply_rounding("power_consumption", self.sensor_power_consumption.native_value)
                     if self.sensor_power_consumption and self.sensor_power_consumption.native_value not in (STATE_UNKNOWN, STATE_UNAVAILABLE, None)
@@ -1375,8 +1375,8 @@ class PlantDevice(Entity):
                 ATTR_SENSOR: self.sensor_power_consumption.entity_id if self.sensor_power_consumption else None,
             },
             ATTR_PH: {
-                ATTR_MAX: self.max_ph.state if self.max_ph else None,
-                ATTR_MIN: self.min_ph.state if self.min_ph else None,
+                ATTR_MAX: self.max_ph.native_value if self.max_ph else None,
+                ATTR_MIN: self.min_ph.native_value if self.min_ph else None,
                 ATTR_CURRENT: (
                     self._apply_rounding("ph", self.sensor_ph.native_value)
                     if self.sensor_ph and self.sensor_ph.native_value not in (STATE_UNKNOWN, STATE_UNAVAILABLE, None)
