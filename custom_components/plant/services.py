@@ -80,9 +80,6 @@ from .plant_helpers import PlantHelper
 _LOGGER = logging.getLogger(__name__)
 
 
-_LOGGER = logging.getLogger(__name__)
-
-
 # Service Schemas
 REPLACE_SENSOR_SCHEMA = vol.Schema({
     vol.Required("meter_entity"): cv.string,
@@ -198,131 +195,137 @@ LIST_TENTS_SCHEMA = vol.Schema({})
 
 async def async_setup_services(hass: HomeAssistant) -> None:
     """Set up services for plant integration."""
-
-    async def replace_sensor(call: ServiceCall) -> None:
-        found = False
-        for entry_id in hass.data[DOMAIN]:
-            if ATTR_SENSORS in hass.data[DOMAIN][entry_id]:
-                for sensor in hass.data[DOMAIN][entry_id][ATTR_SENSORS]:
-                    if sensor.entity_id == meter_entity:
-                        found = True
-                        break
-        if not found:
-            _LOGGER.warning(
-                "Refuse to update non-%s entities: %s", DOMAIN, meter_entity
-            )
-            return False
-        if new_sensor and new_sensor != "" and not new_sensor.startswith("sensor."):
-            _LOGGER.warning("%s is not a sensor", new_sensor)
-            return False
-
-        try:
-            meter = hass.states.get(meter_entity)
-        except AttributeError:
-            _LOGGER.error("Meter entity %s not found", meter_entity)
-            return False
-        if meter is None:
-            _LOGGER.error("Meter entity %s not found", meter_entity)
-            return False
-
-        if new_sensor and new_sensor != "":
-            try:
-                test = hass.states.get(new_sensor)
-            except AttributeError:
-                _LOGGER.error("New sensor entity %s not found", meter_entity)
-                return False
-            if test is None:
-                _LOGGER.error("New sensor entity %s not found", meter_entity)
-                return False
-        else:
-            new_sensor = None
-
-        _LOGGER.info(
-            "Going to replace the external sensor for %s with %s",
-            meter_entity,
-            new_sensor,
-        )
-        for key in hass.data[DOMAIN]:
-            if ATTR_SENSORS in hass.data[DOMAIN][key]:
-                meters = hass.data[DOMAIN][key][ATTR_SENSORS]
-                for meter in meters:
-                    if meter.entity_id == meter_entity:
-                        meter.replace_external_sensor(new_sensor)
-        return
-
+    # Register all plant services
+    
     async def change_tent(call: ServiceCall) -> None:
-        """Change the tent assignment for a plant."""
-        plant_entity = call.data.get("plant_entity")
-        tent_entity_id = call.data.get("tent_entity")
-
-        # Find the plant
-        plant = None
-        for entry_id in hass.data[DOMAIN]:
-            if ATTR_PLANT in hass.data[DOMAIN][entry_id]:
-                p = hass.data[DOMAIN][entry_id][ATTR_PLANT]
-                if p.entity_id == plant_entity:
-                    plant = p
-                    break
-
-        if not plant:
-            _LOGGER.warning("Plant entity %s not found", plant_entity)
-            return False
-
-        # Find the tent
-        tent = None
-        if tent_entity_id:
-            for entry_id in hass.data[DOMAIN]:
-                if ATTR_PLANT in hass.data[DOMAIN][entry_id]:
-                    t = hass.data[DOMAIN][entry_id][ATTR_PLANT]
-                    if t.entity_id == tent_entity_id and t.device_type == DEVICE_TYPE_TENT:
-                        tent = t
-                        break
-
-        if tent_entity_id and not tent:
-            _LOGGER.warning("Tent entity %s not found", tent_entity_id)
-            return False
-
-        # Change the tent assignment
-        plant.change_tent(tent)
+        """Change the tent assignment for a plant and update its sensors."""
+        _LOGGER.info("change_tent service called with data: %s", call.data)
         
-        # Trigger a state update to ensure the frontend gets the new values
-        plant.async_schedule_update_ha_state(True)
+        entity_id = call.data.get("entity_id")
+        tent_id = call.data.get(ATTR_TENT_ID)
+        tent_name = call.data.get("tent_name")
         
-        _LOGGER.info("Changed tent for plant %s to %s", plant_entity, tent_entity_id or "None")
-        return True
-
-    async def remove_plant(call: ServiceCall) -> None:
-        """Remove a plant entity and all its associated entities."""
-        plant_entity = call.data.get("plant_entity")
-
-        found = False
-        target_entry_id = None
-        target_plant = None
-        for entry_id in hass.data[DOMAIN]:
+        if not entity_id or (not tent_id and not tent_name):
+            raise HomeAssistantError("entity_id and either tent_id or tent_name are required")
+        
+        _LOGGER.debug("Looking for plant entity: %s", entity_id)
+        
+        # Resolve plant entity
+        plant_entity = None
+        for entry_id in hass.data.get(DOMAIN, {}):
             if ATTR_PLANT in hass.data[DOMAIN][entry_id]:
                 plant = hass.data[DOMAIN][entry_id][ATTR_PLANT]
-                if plant.entity_id == plant_entity:
-                    found = True
-                    target_entry_id = entry_id
-                    target_plant = plant
-                    break
-
-        if not found:
-            _LOGGER.warning(
-                "Refuse to remove non-%s entity: %s", DOMAIN, plant_entity
-            )
-            return False
-
-        # Prüfe ob die Plant einem Cycle zugeordnet ist und aktualisiere dessen Phase
-        device_registry = dr.async_get(hass)
-        plant_device = device_registry.async_get_device(
-            identifiers={(DOMAIN, target_plant.unique_id)}
-        )
+                # Check if this is a PlantDevice and has the correct entity_id
+                if hasattr(plant, "entity_id") and plant.entity_id == entity_id:
+                    # Additional check to ensure it's a PlantDevice and not a Tent
+                    # We can't import PlantDevice due to circular imports, so we check the device_type attribute
+                    if hasattr(plant, "device_type") and plant.device_type == DEVICE_TYPE_PLANT:
+                        plant_entity = plant
+                        _LOGGER.debug("Found plant entity: %s", plant_entity.name)
+                        break
+        if not plant_entity:
+            raise HomeAssistantError(f"Plant entity {entity_id} not found")
         
-        if plant_device and plant_device.via_device_id:
-            # Suche das Cycle Device
-            for device in device_registry.devices.values():
-                if device.id == plant_device.via_device_id:
+        # Resolve tent by tent_id or tent_name
+        tent_entity = None
+        tent_id_found = None
+        
+        # If tent_name is provided, find the corresponding tent_id first
+        if tent_name and not tent_id:
+            _LOGGER.debug("Looking for tent by name: %s", tent_name)
+            for entry in hass.config_entries.async_entries(DOMAIN):
+                plant_info = entry.data.get(FLOW_PLANT_INFO, {})
+                if plant_info.get(ATTR_DEVICE_TYPE) == DEVICE_TYPE_TENT and plant_info.get(ATTR_NAME) == tent_name:
+                    tent_id = plant_info.get("tent_id")
+                    tent_id_found = tent_id
+                    _LOGGER.debug("Found tent ID %s for name %s", tent_id, tent_name)
+                    break
+            
+            if not tent_id_found:
+                raise HomeAssistantError(f"Tent with name '{tent_name}' not found")
+        
+        # Resolve tent by tent_id
+        _LOGGER.debug("Looking for tent by ID: %s", tent_id)
+        for entry in hass.config_entries.async_entries(DOMAIN):
+            plant_info = entry.data.get(FLOW_PLANT_INFO, {})
+            if plant_info.get(ATTR_DEVICE_TYPE) == DEVICE_TYPE_TENT and plant_info.get("tent_id") == tent_id:
+                # Use existing instantiated entity if available
+                if entry.entry_id in hass.data.get(DOMAIN, {}) and ATTR_PLANT in hass.data[DOMAIN][entry.entry_id]:
+                    tent_entity = hass.data[DOMAIN][entry.entry_id][ATTR_PLANT]
+                    _LOGGER.debug("Found existing tent entity: %s", tent_entity.name)
+                else:
+                    # As a fallback, construct a Tent object bound to this entry
+                    from .tent import Tent
+                    tent_entity = Tent(hass, entry)
+                    _LOGGER.debug("Created new tent entity: %s", tent_entity.name)
+                break
+        if not tent_entity:
+            raise HomeAssistantError(f"Tent with ID {tent_id} not found")
+        
+        # Log information about the operation
+        _LOGGER.info("Changing tent assignment for plant %s (%s) to tent %s (%s)", 
+                    plant_entity.name, entity_id, tent_entity.name, tent_id)
+        
+        # Instead of isinstance check, we'll use the device_type attribute which we already verified
+        # The plant_entity is already verified to be a PlantDevice with device_type == DEVICE_TYPE_PLANT
+        plant_entity.change_tent(tent_entity)
+        _LOGGER.info("Changed tent assignment for plant %s to tent %s (ID: %s)", entity_id, tent_entity.name, tent_id)
+    
+    # Register the change_tent service
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_CHANGE_TENT,
+        change_tent,
+        schema=CHANGE_TENT_SCHEMA
+    )
+
+    async def list_tents(call: ServiceCall) -> ServiceResponse:
+        """List all available tents."""
+        tents = []
+        
+        # Find all tent entries
+        for entry in hass.config_entries.async_entries(DOMAIN):
+            plant_info = entry.data.get(FLOW_PLANT_INFO, {})
+            if plant_info.get(ATTR_DEVICE_TYPE) == DEVICE_TYPE_TENT:
+                tent_data = {
+                    "tent_id": plant_info.get("tent_id"),
+                    "name": plant_info.get(ATTR_NAME),
+                    "sensors": [],
+                }
+                
+                # Add sensor information
+                for key in [FLOW_SENSOR_ILLUMINANCE, FLOW_SENSOR_HUMIDITY, FLOW_SENSOR_MOISTURE, FLOW_SENSOR_CO2, 
+                           FLOW_SENSOR_POWER_CONSUMPTION, FLOW_SENSOR_PH]:
+                    if plant_info.get(key):
+                        tent_data["sensors"].append({
+                            "type": key,
+                            "entity_id": plant_info.get(key)
+                        })
+                
+                tents.append(tent_data)
+        
+        return {"tents": tents}
+    
+    # Register the list_tents service
+    SERVICE_LIST_TENTS_LOCAL = "list_tents"
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_LIST_TENTS_LOCAL,
+        list_tents,
+        schema=LIST_TENTS_SCHEMA,
+    )
+
+
+async def async_unload_services(hass: HomeAssistant) -> None:
+    """Unload services for plant integration."""
+    # Remove all plant services
+    if hass.services.has_service(DOMAIN, SERVICE_CHANGE_TENT):
+        hass.services.async_remove(DOMAIN, SERVICE_CHANGE_TENT)
+    if hass.services.has_service(DOMAIN, "list_tents"):
+        hass.services.async_remove(DOMAIN, "list_tents")
+    _LOGGER.info("Unloaded all plant services")
+
+    _LOGGER.info("Unloaded all plant services")
                     cycle_device = device
                     # Finde den zugehörigen Cycle
                     for entry_id in hass.data[DOMAIN]:
@@ -1894,158 +1897,71 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         DOMAIN,
         SERVICE_ADD_CONDUCTIVITY,
         add_conductivity,
-        schema=ADD_CONDUCTIVITY_SCHEMA,
-    )
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_ADD_PH,
-        add_ph,
-        schema=ADD_PH_SCHEMA,
+import asyncio
+import logging
+import voluptuous as vol
+from datetime import datetime
+
+from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.helpers import config_validation as cv
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.entity_registry import EntityRegistry as er
+from homeassistant.helpers.device_registry import DeviceRegistry as dr
+from homeassistant.helpers.service import SERVICE_ATTR_ENTITY_ID
+from homeassistant.helpers.service import SupportsResponse, ServiceResponse
+
+from .const import (
+    DOMAIN, 
+    DEVICE_TYPE_PLANT, 
+    DEVICE_TYPE_TENT,
+    FLOW_PLANT_INFO,
+    ATTR_DEVICE_TYPE,
+    ATTR_TENT_ID
+)
+
+_LOGGER = logging.getLogger(__name__)
+
+# Service schemas
+CHANGE_TENT_SCHEMA = vol.Schema({
+    vol.Required(SERVICE_ATTR_ENTITY_ID): cv.entity_id,
+    vol.Optional(ATTR_TENT_ID): cv.string,
+    vol.Optional("tent_name"): cv.string,
+})
+
+LIST_TENTS_SCHEMA = vol.Schema({})
+
+
+async def async_setup_services(hass: HomeAssistant) -> None:
+    """Set up services for plant integration."""
+    # Register all plant services
+    from homeassistant.helpers.service import SERVICE_ATTR_ENTITY_ID
+    from homeassistant.helpers import config_validation as cv
+    from homeassistant.exceptions import HomeAssistantError
+    from .const import (
+        DOMAIN, 
+        DEVICE_TYPE_PLANT, 
+        DEVICE_TYPE_TENT,
+        FLOW_PLANT_INFO,
+        ATTR_DEVICE_TYPE,
+        ATTR_TENT_ID
     )
     
-    # Register export/import services
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_EXPORT_PLANTS,
-        export_plants,
-        schema=EXPORT_PLANTS_SCHEMA,
-        supports_response=SupportsResponse.OPTIONAL
-    )
+    _LOGGER = logging.getLogger(__name__)
     
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_IMPORT_PLANTS,
-        import_plants,
-        schema=IMPORT_PLANTS_SCHEMA,
-        supports_response=SupportsResponse.OPTIONAL
-    )
+    # Service schemas
+    CHANGE_TENT_SCHEMA = vol.Schema({
+        vol.Required(SERVICE_ATTR_ENTITY_ID): cv.entity_id,
+        vol.Optional(ATTR_TENT_ID): cv.string,
+        vol.Optional("tent_name"): cv.string,
+    })
     
-    async def create_tent(call: ServiceCall) -> ServiceResponse:
-        """Create a new tent config entry and return entity/device identifiers."""
-        from .__init__ import _get_next_id
-        from homeassistant.data_entry_flow import UnknownFlow
-        
-        tent_name = call.data.get(ATTR_NAME)
-        if not tent_name:
-            raise HomeAssistantError("name is required")
-        
-        # Prepare tent info
-        tent_info = {
-            ATTR_NAME: tent_name,
-            "name": tent_name,
-            ATTR_DEVICE_TYPE: DEVICE_TYPE_TENT,
-            ATTR_IS_NEW_PLANT: True,
-            "plant_emoji": "⛺",
-            "journal": {},
-            "maintenance_entries": [],
-            "created_at": datetime.now().isoformat(),
-            "updated_at": datetime.now().isoformat(),
-        }
-        # Store typed sensor fields if provided
-        for key in (
-            FLOW_SENSOR_ILLUMINANCE,
-            FLOW_SENSOR_HUMIDITY,
-            FLOW_SENSOR_CO2,
-            FLOW_SENSOR_POWER_CONSUMPTION,
-            FLOW_SENSOR_PH,
-        ):
-            if call.data.get(key):
-                tent_info[key] = call.data[key]
-        
-        # Generate a unique ID proactively (optional; setup will ensure it exists)
-        try:
-            tent_id = await _get_next_id(hass, DEVICE_TYPE_TENT)
-            tent_info["tent_id"] = tent_id
-        except Exception:
-            tent_id = None
-        
-        try:
-            # Use import flow but handle it correctly without trying to access the result
-            # Import flows complete immediately, so we just need to initiate it
-            from homeassistant.config_entries import SOURCE_IMPORT
-            config_data = {FLOW_PLANT_INFO: tent_info}
-            
-            # Initiate the import flow - it will complete immediately
-            # We expect this to raise UnknownFlow, but that's okay because the entry is created
-            try:
-                await hass.config_entries.flow.async_init(
-                    DOMAIN,
-                    context={"source": SOURCE_IMPORT},
-                    data=config_data,
-                )
-            except UnknownFlow:
-                # This is expected - import flows complete immediately and are removed
-                # The entry should have been created despite the exception
-                pass
-            
-            # Since import flows complete immediately, we need to find the created entry
-            # by looking for the most recently created entry with our tent name
-            entry = None
-            for check_entry in hass.config_entries.async_entries(DOMAIN):
-                if (check_entry.title == tent_name and 
-                    check_entry.data.get(FLOW_PLANT_INFO, {}).get(ATTR_NAME) == tent_name and
-                    check_entry.data.get(FLOW_PLANT_INFO, {}).get(ATTR_DEVICE_TYPE) == DEVICE_TYPE_TENT):
-                    entry = check_entry
-                    break
-            
-            if not entry:
-                raise HomeAssistantError("Failed to find created tent entry")
-            
-            _LOGGER.info("Created tent '%s' with entry_id=%s", tent_name, entry.entry_id)
-            
-            # Try to resolve entity_id and device_id
-            # Wait a bit for the entry to be fully set up
-            await asyncio.sleep(2)
-            entity_registry = er.async_get(hass)
-            device_registry = dr.async_get(hass)
-            
-            entity_id = None
-            device_id = None
-            for entity_reg in entity_registry.entities.values():
-                if entity_reg.config_entry_id == entry.entry_id and entity_reg.domain == DOMAIN:
-                    entity_id = entity_reg.entity_id
-                    device_id = entity_reg.device_id
-                    break
-            
-            # Fallback: read from in-memory objects
-            if not entity_id:
-                for _ in range(6):
-                    if entry.entry_id in hass.data.get(DOMAIN, {}):
-                        if ATTR_PLANT in hass.data[DOMAIN][entry.entry_id]:
-                            tent_obj = hass.data[DOMAIN][entry.entry_id][ATTR_PLANT]
-                            if hasattr(tent_obj, "entity_id"):
-                                entity_id = tent_obj.entity_id
-                            if hasattr(tent_obj, "device_id"):
-                                device_id = tent_obj.device_id
-                            break
-                    await asyncio.sleep(0.5)
-            
-            response = {"success": True, "message": f"Tent {tent_name} created successfully"}
-            if tent_id:
-                response["tent_id"] = tent_id
-            if entity_id:
-                response["entity_id"] = entity_id
-            if device_id:
-                response["device_id"] = device_id
-            return response
-        except Exception as e:
-            _LOGGER.exception("Error creating tent entry: %s", e)
-            raise HomeAssistantError(f"Failed to create tent: {e}")
-    
-    # Register the create_tent service
-    hass.services.async_register(
-        DOMAIN,
-        "create_tent",
-        create_tent,
-        schema=CREATE_TENT_SCHEMA,
-        supports_response=SupportsResponse.OPTIONAL
-    )
+    LIST_TENTS_SCHEMA = vol.Schema({})
     
     async def change_tent(call: ServiceCall) -> None:
         """Change the tent assignment for a plant and update its sensors."""
         _LOGGER.info("change_tent service called with data: %s", call.data)
         
-        entity_id = call.data.get("entity_id")
+        entity_id = call.data.get(SERVICE_ATTR_ENTITY_ID)
         tent_id = call.data.get(ATTR_TENT_ID)
         tent_name = call.data.get("tent_name")
         
@@ -2057,8 +1973,8 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         # Resolve plant entity
         plant_entity = None
         for entry_id in hass.data.get(DOMAIN, {}):
-            if ATTR_PLANT in hass.data[DOMAIN][entry_id]:
-                plant = hass.data[DOMAIN][entry_id][ATTR_PLANT]
+            if "plant" in hass.data[DOMAIN][entry_id]:
+                plant = hass.data[DOMAIN][entry_id]["plant"]
                 # Check if this is a PlantDevice and has the correct entity_id
                 if hasattr(plant, "entity_id") and plant.entity_id == entity_id:
                     # Additional check to ensure it's a PlantDevice and not a Tent
@@ -2079,7 +1995,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             _LOGGER.debug("Looking for tent by name: %s", tent_name)
             for entry in hass.config_entries.async_entries(DOMAIN):
                 plant_info = entry.data.get(FLOW_PLANT_INFO, {})
-                if plant_info.get(ATTR_DEVICE_TYPE) == DEVICE_TYPE_TENT and plant_info.get(ATTR_NAME) == tent_name:
+                if plant_info.get(ATTR_DEVICE_TYPE) == DEVICE_TYPE_TENT and plant_info.get("name") == tent_name:
                     tent_id = plant_info.get("tent_id")
                     tent_id_found = tent_id
                     _LOGGER.debug("Found tent ID %s for name %s", tent_id, tent_name)
@@ -2094,8 +2010,8 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             plant_info = entry.data.get(FLOW_PLANT_INFO, {})
             if plant_info.get(ATTR_DEVICE_TYPE) == DEVICE_TYPE_TENT and plant_info.get("tent_id") == tent_id:
                 # Use existing instantiated entity if available
-                if entry.entry_id in hass.data.get(DOMAIN, {}) and ATTR_PLANT in hass.data[DOMAIN][entry.entry_id]:
-                    tent_entity = hass.data[DOMAIN][entry.entry_id][ATTR_PLANT]
+                if entry.entry_id in hass.data.get(DOMAIN, {}) and "plant" in hass.data[DOMAIN][entry.entry_id]:
+                    tent_entity = hass.data[DOMAIN][entry.entry_id]["plant"]
                     _LOGGER.debug("Found existing tent entity: %s", tent_entity.name)
                 else:
                     # As a fallback, construct a Tent object bound to this entry
@@ -2110,19 +2026,13 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         _LOGGER.info("Changing tent assignment for plant %s (%s) to tent %s (%s)", 
                     plant_entity.name, entity_id, tent_entity.name, tent_id)
         
-        # Get tent sensors before changing
-        tent_sensors = tent_entity.get_sensors()
-        _LOGGER.debug("Tent sensors: %s", tent_sensors)
-        
         # Instead of isinstance check, we'll use the device_type attribute which we already verified
         # The plant_entity is already verified to be a PlantDevice with device_type == DEVICE_TYPE_PLANT
         plant_entity.change_tent(tent_entity)
-        # Get tent sensors and replace them in the plant
-        # tent_sensors = tent_entity.get_sensors()
-        # plant_entity.replace_sensors(tent_sensors)  # This is now handled by change_tent
         _LOGGER.info("Changed tent assignment for plant %s to tent %s (ID: %s)", entity_id, tent_entity.name, tent_id)
     
     # Register the change_tent service
+    SERVICE_CHANGE_TENT = "change_tent"
     hass.services.async_register(
         DOMAIN,
         SERVICE_CHANGE_TENT,
@@ -2140,13 +2050,13 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             if plant_info.get(ATTR_DEVICE_TYPE) == DEVICE_TYPE_TENT:
                 tent_data = {
                     "tent_id": plant_info.get("tent_id"),
-                    "name": plant_info.get(ATTR_NAME),
+                    "name": plant_info.get("name"),
                     "sensors": [],
                 }
                 
                 # Add sensor information
-                for key in [FLOW_SENSOR_ILLUMINANCE, FLOW_SENSOR_HUMIDITY, FLOW_SENSOR_MOISTURE, FLOW_SENSOR_CO2, 
-                           FLOW_SENSOR_POWER_CONSUMPTION, FLOW_SENSOR_PH]:
+                for key in ["illuminance_sensor", "humidity_sensor", "moisture_sensor", "co2_sensor", 
+                           "power_consumption_sensor", "ph_sensor"]:
                     if plant_info.get(key):
                         tent_data["sensors"].append({
                             "type": key,
@@ -2158,57 +2068,28 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         return {"tents": tents}
     
     # Register the list_tents service
-    SERVICE_LIST_TENTS_LOCAL = "list_tents"
+    SERVICE_LIST_TENTS = "list_tents"
     hass.services.async_register(
         DOMAIN,
-        SERVICE_LIST_TENTS_LOCAL,
+        SERVICE_LIST_TENTS,
         list_tents,
         schema=LIST_TENTS_SCHEMA,
     )
 
-    # Define the service to add a tent
-    SERVICE_ADD_TENT_LOCAL = "add_tent"
 
-    def add_tent(call):
-        tent_info = {}
+async def async_unload_services(hass: HomeAssistant) -> None:
+    """Unload services for plant integration."""
+    # Remove all plant services
+    SERVICE_CHANGE_TENT = "change_tent"
+    SERVICE_LIST_TENTS = "list_tents"
+    
+    if hass.services.has_service(DOMAIN, SERVICE_CHANGE_TENT):
+        hass.services.async_remove(DOMAIN, SERVICE_CHANGE_TENT)
+    if hass.services.has_service(DOMAIN, SERVICE_LIST_TENTS):
+        hass.services.async_remove(DOMAIN, SERVICE_LIST_TENTS)
+    _LOGGER = logging.getLogger(__name__)
+    _LOGGER.info("Unloaded all plant services")
 
-        # Store typed sensor fields if provided
-        for key in (
-            FLOW_SENSOR_ILLUMINANCE,
-            FLOW_SENSOR_HUMIDITY,
-            FLOW_SENSOR_MOISTURE,
-            FLOW_SENSOR_CO2,
-            FLOW_SENSOR_POWER_CONSUMPTION,
-            FLOW_SENSOR_PH,
-        ):
-            if call.data.get(key):
-                tent_info[key] = call.data[key]
-        # Implementation would go here
-        pass
-    if hass.services.has_service(DOMAIN, SERVICE_REMOVE_PLANT):
-        hass.services.async_remove(DOMAIN, SERVICE_REMOVE_PLANT)
-    if hass.services.has_service(DOMAIN, SERVICE_CREATE_PLANT):
-        hass.services.async_remove(DOMAIN, SERVICE_CREATE_PLANT)
-    if hass.services.has_service(DOMAIN, SERVICE_CREATE_CYCLE):
-        hass.services.async_remove(DOMAIN, SERVICE_CREATE_CYCLE)
-    if hass.services.has_service(DOMAIN, SERVICE_MOVE_TO_CYCLE):
-        hass.services.async_remove(DOMAIN, SERVICE_MOVE_TO_CYCLE)
-    if hass.services.has_service(DOMAIN, SERVICE_REMOVE_CYCLE):
-        hass.services.async_remove(DOMAIN, SERVICE_REMOVE_CYCLE)
-    if hass.services.has_service(DOMAIN, SERVICE_CLONE_PLANT):
-        hass.services.async_remove(DOMAIN, SERVICE_CLONE_PLANT)
-    if hass.services.has_service(DOMAIN, SERVICE_MOVE_TO_AREA):
-        hass.services.async_remove(DOMAIN, SERVICE_MOVE_TO_AREA)
-    if hass.services.has_service(DOMAIN, SERVICE_ADD_IMAGE):
-        hass.services.async_remove(DOMAIN, SERVICE_ADD_IMAGE)
-    if hass.services.has_service(DOMAIN, SERVICE_ADD_WATERING):
-        hass.services.async_remove(DOMAIN, SERVICE_ADD_WATERING)
-    if hass.services.has_service(DOMAIN, SERVICE_ADD_CONDUCTIVITY):
-        hass.services.async_remove(DOMAIN, SERVICE_ADD_CONDUCTIVITY)
-    if hass.services.has_service(DOMAIN, SERVICE_ADD_PH):
-        hass.services.async_remove(DOMAIN, SERVICE_ADD_PH)
-    if hass.services.has_service(DOMAIN, SERVICE_CHANGE_POSITION):
-        hass.services.async_remove(DOMAIN, SERVICE_CHANGE_POSITION)
     if hass.services.has_service(DOMAIN, SERVICE_EXPORT_PLANTS):
         hass.services.async_remove(DOMAIN, SERVICE_EXPORT_PLANTS)
     if hass.services.has_service(DOMAIN, SERVICE_IMPORT_PLANTS):
