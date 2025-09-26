@@ -19,6 +19,8 @@ from homeassistant.util import dt as dt_util
 from homeassistant.helpers import area_registry as ar
 
 from .const import (
+    ATTR_DEVICE_TYPE,
+    ATTR_NAME,
     ATTR_PLANT,
     DEFAULT_GROWTH_PHASE,
     DOMAIN,
@@ -605,7 +607,6 @@ class PlantTentSelect(SelectEntity, RestoreEntity):
         self._attr_name = f"{plant_device.name} Tent"
         self._attr_unique_id = f"{config.entry_id}-tent-select"
         self._attr_options = []
-        self._tent_mapping = {}
         self._attr_current_option = ""
         self._update_tent_options()  # Initial update
 
@@ -674,21 +675,15 @@ class PlantTentSelect(SelectEntity, RestoreEntity):
             if plant_info.get(ATTR_DEVICE_TYPE) == DEVICE_TYPE_TENT:
                 tent_name = plant_info.get(ATTR_NAME)
                 tent_id = plant_info.get("tent_id")
-                # Get the entity_id from the entry
-                entity_id = f"plant.tent_{tent_id}"  # This is a placeholder, actual entity_id will be determined
                 tents.append((
                     tent_name,
-                    tent_id,
-                    entity_id
+                    tent_id
                 ))
                 _LOGGER.debug("Found tent: %s (%s)", tent_name, tent_id)
 
         # Sortiere nach ID und erstelle Optionen
         tents.sort(key=lambda x: x[1] if x[1] else "")
-        self._attr_options = [""] + [f"{name} ({tid})" for name, tid, _ in tents]
-        self._tent_mapping = {
-            f"{name} ({tid})": f"{name}" for name, tid, _ in tents
-        }
+        self._attr_options = [""] + [f"{name} ({tid})" for name, tid in tents]
         _LOGGER.debug("Updated tent options to: %s", self._attr_options)
         
         # Update current option if needed
@@ -704,15 +699,24 @@ class PlantTentSelect(SelectEntity, RestoreEntity):
         if option:
             # Extrahiere den Tent Namen aus der Option
             tent_name = option.split(" (")[0] if " (" in option else option
-            await self._hass.services.async_call(
-                DOMAIN,
-                "change_tent",
-                {
-                    "entity_id": self._plant.entity_id,
-                    "tent_name": tent_name
-                },
-                blocking=True
-            )
+            # Get the tent_id from the config entries
+            tent_id = None
+            for entry in self._hass.config_entries.async_entries(DOMAIN):
+                plant_info = entry.data.get(FLOW_PLANT_INFO, {})
+                if plant_info.get(ATTR_DEVICE_TYPE) == DEVICE_TYPE_TENT and plant_info.get(ATTR_NAME) == tent_name:
+                    tent_id = plant_info.get("tent_id")
+                    break
+            
+            if tent_id:
+                await self._hass.services.async_call(
+                    DOMAIN,
+                    "change_tent",
+                    {
+                        "entity_id": self._plant.entity_id,
+                        "tent_id": tent_id  # Use tent_id instead of tent_name
+                    },
+                    blocking=True
+                )
         else:
             # Entferne Tent Zuweisung
             await self._hass.services.async_call(
@@ -720,7 +724,7 @@ class PlantTentSelect(SelectEntity, RestoreEntity):
                 "change_tent",
                 {
                     "entity_id": self._plant.entity_id,
-                    "tent_name": ""
+                    "tent_id": ""  # Use empty string to remove tent assignment
                 },
                 blocking=True
             )
