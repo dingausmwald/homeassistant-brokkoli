@@ -25,6 +25,7 @@ ATTR_WATER_CONSUMPTION = "water_consumption"
 ATTR_FERTILIZER_CONSUMPTION = "fertilizer_consumption"
 ATTR_POWER_CONSUMPTION = "power_consumption"
 ATTR_PH = "ph"
+ATTR_NAME = "name"
 
 # Device Classes
 DEVICE_CLASS_PH = "ph"  # Eigene Device Class für pH
