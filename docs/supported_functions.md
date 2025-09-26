@@ -241,6 +241,14 @@ Add manual watering entries to track consumption.
 - **State Changes**: Notification of plant state changes
 - **Custom Alerts**: Configurable alert conditions
 
+### Status Stabilization
+Prevent rapid state changes (flickering) between "Problem" and "OK" states with advanced stabilization mechanisms:
+
+- **Status Debounce**: Configurable time delay before applying status changes
+- **Hysteresis**: Margin around threshold values to prevent rapid switching
+- **Stabilization Window**: Minimum duration for sustained sensor issues before triggering problems
+- **Logging Optimization**: Configurable verbosity to reduce excessive debug output
+
 ### Automation Support
 - **State Triggers**: Trigger automations based on plant states
 - **Service Calls**: Call plant services from automations

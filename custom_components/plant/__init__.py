@@ -968,6 +968,17 @@ class PlantDevice(Entity):
         # Initialize state
         self._attr_state = STATE_UNKNOWN
         
+        # Add configuration parameters for status stabilization (Phase 1)
+        self._status_debounce_time = config.options.get("status_debounce_time", 0)  # seconds
+        self._hysteresis_percentage = config.options.get("hysteresis_percentage", 0.0)  # percentage
+        self._stabilization_window = config.options.get("stabilization_window", 0)  # seconds
+        self._verbose_logging = config.options.get("verbose_logging", False)  # logging level
+        
+        # Initialize debounce and stabilization tracking variables
+        self._last_status_change = None
+        self._pending_status = None
+        self._sensor_issue_times = {}  # Track when each sensor first reported an issue
+        
         # Initialize update scheduler
         self._update_unsub = None
         self._schedule_regular_updates()
@@ -1693,6 +1704,65 @@ class PlantDevice(Entity):
         except (ValueError, TypeError):
             return False
 
+    def _check_sensor_with_hysteresis(self, current_value, min_value, max_value, current_status, status_low, status_high, status_ok):
+        """Check sensor value with hysteresis."""
+        if self._hysteresis_percentage > 0:
+            hysteresis_margin = (max_value - min_value) * (self._hysteresis_percentage / 100.0) / 2.0
+            min_with_hysteresis = min_value + hysteresis_margin
+            max_with_hysteresis = max_value - hysteresis_margin
+            
+            # Apply hysteresis based on current status to prevent flickering
+            if current_status == STATE_LOW:
+                # Was low, need higher value to switch to OK
+                if current_value >= min_with_hysteresis:
+                    return status_ok
+                else:
+                    return STATE_LOW
+            elif current_status == STATE_HIGH:
+                # Was high, need lower value to switch to OK
+                if current_value <= max_with_hysteresis:
+                    return status_ok
+                else:
+                    return STATE_HIGH
+            else:
+                # Currently OK, use normal thresholds with hysteresis
+                if current_value < min_value:
+                    return STATE_LOW
+                elif current_value > max_value:
+                    return STATE_HIGH
+                else:
+                    return status_ok
+        else:
+            # No hysteresis, use normal threshold checking
+            if current_value < min_value:
+                return STATE_LOW
+            elif current_value > max_value:
+                return STATE_HIGH
+            else:
+                return status_ok
+
+    def _check_sensor_stabilization(self, sensor_key, is_issue):
+        """Check if sensor issue has stabilized."""
+        import datetime
+        now = datetime.datetime.now()
+        
+        if is_issue:
+            if sensor_key not in self._sensor_issue_times:
+                # First time seeing this issue, record the time
+                self._sensor_issue_times[sensor_key] = now
+                return False  # Not stabilized yet
+            elif (now - self._sensor_issue_times[sensor_key]).seconds >= self._stabilization_window:
+                # Issue has been present for stabilization window
+                return True
+            else:
+                # Issue hasn't been present long enough
+                return False
+        else:
+            # No issue, clear any recorded time
+            if sensor_key in self._sensor_issue_times:
+                del self._sensor_issue_times[sensor_key]
+            return False  # No issue means no problem state
+
     @property
     def threshold_entities(self) -> list[Entity]:
         """List all threshold entities"""
@@ -1754,7 +1824,9 @@ class PlantDevice(Entity):
 
     def update(self) -> None:
         """Run on every update to allow for changes from the GUI and service call."""
-        _LOGGER.debug("Updating plant status for %s", self.name)
+        # Only log at start if verbose logging is enabled
+        if self._verbose_logging:
+            _LOGGER.debug("Updating plant status for %s", self.name)
         new_state = STATE_OK
         known_state = False
 
@@ -1766,22 +1838,63 @@ class PlantDevice(Entity):
                     temp_value = float(temperature)
                     min_temp = float(self.min_temperature.native_value)
                     max_temp = float(self.max_temperature.native_value)
-                    _LOGGER.debug("Evaluating temperature sensor: value=%s, min=%s, max=%s", temp_value, min_temp, max_temp)
-                    if temp_value < min_temp:
-                        self.temperature_status = STATE_LOW
-                        if self.temperature_trigger:
-                            new_state = STATE_PROBLEM
-                            _LOGGER.debug("Temperature is LOW, setting plant state to PROBLEM")
-                    elif temp_value > max_temp:
-                        self.temperature_status = STATE_HIGH
-                        if self.temperature_trigger:
-                            new_state = STATE_PROBLEM
-                            _LOGGER.debug("Temperature is HIGH, setting plant state to PROBLEM")
-                    else:
-                        self.temperature_status = STATE_OK
+                    if self._verbose_logging:
+                        _LOGGER.debug("Evaluating temperature sensor: value=%s, min=%s, max=%s", temp_value, min_temp, max_temp)
+                    
+                    # Use hysteresis-aware checking if enabled
+                    new_temp_status = self._check_sensor_with_hysteresis(
+                        temp_value, min_temp, max_temp, 
+                        self.temperature_status, STATE_LOW, STATE_HIGH, STATE_OK
+                    )
+                    
+                    # Check stabilization if enabled
+                    is_temp_issue = new_temp_status != STATE_OK
+                    temp_stabilized = True
+                    if self._stabilization_window > 0:
+                        temp_stabilized = self._check_sensor_stabilization("temperature", is_temp_issue)
+                    
+                    self.temperature_status = new_temp_status
+                    
+                    if is_temp_issue and temp_stabilized and self.temperature_trigger:
+                        new_state = STATE_PROBLEM
+                        _LOGGER.debug("Temperature is %s and stabilized, setting plant state to PROBLEM", new_temp_status)
+                    elif not is_temp_issue:
                         _LOGGER.debug("Temperature is OK")
                 except (ValueError, TypeError) as e:
                     _LOGGER.warning("Invalid value for temperature sensor: %s", str(e))
+
+        if self.sensor_moisture is not None:
+            moisture = self.sensor_moisture.state
+            if moisture is not None and moisture != STATE_UNAVAILABLE and moisture != STATE_UNKNOWN and self.min_moisture is not None and self.max_moisture is not None:
+                try:
+                    known_state = True
+                    moist_value = float(moisture)
+                    min_moist = float(self.min_moisture.native_value)
+                    max_moist = float(self.max_moisture.native_value)
+                    if self._verbose_logging:
+                        _LOGGER.debug("Evaluating moisture sensor: value=%s, min=%s, max=%s", moist_value, min_moist, max_moist)
+                    
+                    # Use hysteresis-aware checking if enabled
+                    new_moist_status = self._check_sensor_with_hysteresis(
+                        moist_value, min_moist, max_moist, 
+                        self.moisture_status, STATE_LOW, STATE_HIGH, STATE_OK
+                    )
+                    
+                    # Check stabilization if enabled
+                    is_moist_issue = new_moist_status != STATE_OK
+                    moist_stabilized = True
+                    if self._stabilization_window > 0:
+                        moist_stabilized = self._check_sensor_stabilization("moisture", is_moist_issue)
+                    
+                    self.moisture_status = new_moist_status
+                    
+                    if is_moist_issue and moist_stabilized and self.moisture_trigger:
+                        new_state = STATE_PROBLEM
+                        _LOGGER.debug("Moisture is %s and stabilized, setting plant state to PROBLEM", new_moist_status)
+                    elif not is_moist_issue:
+                        _LOGGER.debug("Moisture is OK")
+                except (ValueError, TypeError) as e:
+                    _LOGGER.warning("Invalid value for moisture sensor: %s", str(e))
 
         if self.sensor_conductivity is not None:
             conductivity = self.sensor_conductivity.state
@@ -1791,19 +1904,27 @@ class PlantDevice(Entity):
                     cond_value = float(conductivity)
                     min_cond = float(self.min_conductivity.native_value)
                     max_cond = float(self.max_conductivity.native_value)
-                    _LOGGER.debug("Evaluating conductivity sensor: value=%s, min=%s, max=%s", cond_value, min_cond, max_cond)
-                    if cond_value < min_cond:
-                        self.conductivity_status = STATE_LOW
-                        if self.conductivity_trigger:
-                            new_state = STATE_PROBLEM
-                            _LOGGER.debug("Conductivity is LOW, setting plant state to PROBLEM")
-                    elif cond_value > max_cond:
-                        self.conductivity_status = STATE_HIGH
-                        if self.conductivity_trigger:
-                            new_state = STATE_PROBLEM
-                            _LOGGER.debug("Conductivity is HIGH, setting plant state to PROBLEM")
-                    else:
-                        self.conductivity_status = STATE_OK
+                    if self._verbose_logging:
+                        _LOGGER.debug("Evaluating conductivity sensor: value=%s, min=%s, max=%s", cond_value, min_cond, max_cond)
+                    
+                    # Use hysteresis-aware checking if enabled
+                    new_cond_status = self._check_sensor_with_hysteresis(
+                        cond_value, min_cond, max_cond, 
+                        self.conductivity_status, STATE_LOW, STATE_HIGH, STATE_OK
+                    )
+                    
+                    # Check stabilization if enabled
+                    is_cond_issue = new_cond_status != STATE_OK
+                    cond_stabilized = True
+                    if self._stabilization_window > 0:
+                        cond_stabilized = self._check_sensor_stabilization("conductivity", is_cond_issue)
+                    
+                    self.conductivity_status = new_cond_status
+                    
+                    if is_cond_issue and cond_stabilized and self.conductivity_trigger:
+                        new_state = STATE_PROBLEM
+                        _LOGGER.debug("Conductivity is %s and stabilized, setting plant state to PROBLEM", new_cond_status)
+                    elif not is_cond_issue:
                         _LOGGER.debug("Conductivity is OK")
                 except (ValueError, TypeError) as e:
                     _LOGGER.warning("Invalid value for conductivity sensor: %s", str(e))
@@ -1816,19 +1937,27 @@ class PlantDevice(Entity):
                     illum_value = float(illuminance)
                     min_illum = float(self.min_illuminance.native_value)
                     max_illum = float(self.max_illuminance.native_value)
-                    _LOGGER.debug("Evaluating illuminance sensor: value=%s, min=%s, max=%s", illum_value, min_illum, max_illum)
-                    if illum_value < min_illum:
-                        self.illuminance_status = STATE_LOW
-                        if self.illuminance_trigger:
-                            new_state = STATE_PROBLEM
-                            _LOGGER.debug("Illuminance is LOW, setting plant state to PROBLEM")
-                    elif illum_value > max_illum:
-                        self.illuminance_status = STATE_HIGH
-                        if self.illuminance_trigger:
-                            new_state = STATE_PROBLEM
-                            _LOGGER.debug("Illuminance is HIGH, setting plant state to PROBLEM")
-                    else:
-                        self.illuminance_status = STATE_OK
+                    if self._verbose_logging:
+                        _LOGGER.debug("Evaluating illuminance sensor: value=%s, min=%s, max=%s", illum_value, min_illum, max_illum)
+                    
+                    # Use hysteresis-aware checking if enabled
+                    new_illum_status = self._check_sensor_with_hysteresis(
+                        illum_value, min_illum, max_illum, 
+                        self.illuminance_status, STATE_LOW, STATE_HIGH, STATE_OK
+                    )
+                    
+                    # Check stabilization if enabled
+                    is_illum_issue = new_illum_status != STATE_OK
+                    illum_stabilized = True
+                    if self._stabilization_window > 0:
+                        illum_stabilized = self._check_sensor_stabilization("illuminance", is_illum_issue)
+                    
+                    self.illuminance_status = new_illum_status
+                    
+                    if is_illum_issue and illum_stabilized and self.illuminance_trigger:
+                        new_state = STATE_PROBLEM
+                        _LOGGER.debug("Illuminance is %s and stabilized, setting plant state to PROBLEM", new_illum_status)
+                    elif not is_illum_issue:
                         _LOGGER.debug("Illuminance is OK")
                 except (ValueError, TypeError) as e:
                     _LOGGER.warning("Invalid value for illuminance sensor: %s", str(e))
@@ -1841,19 +1970,27 @@ class PlantDevice(Entity):
                     humid_value = float(humidity)
                     min_humid = float(self.min_humidity.native_value)
                     max_humid = float(self.max_humidity.native_value)
-                    _LOGGER.debug("Evaluating humidity sensor: value=%s, min=%s, max=%s", humid_value, min_humid, max_humid)
-                    if humid_value < min_humid:
-                        self.humidity_status = STATE_LOW
-                        if self.humidity_trigger:
-                            new_state = STATE_PROBLEM
-                            _LOGGER.debug("Humidity is LOW, setting plant state to PROBLEM")
-                    elif humid_value > max_humid:
-                        self.humidity_status = STATE_HIGH
-                        if self.humidity_trigger:
-                            new_state = STATE_PROBLEM
-                            _LOGGER.debug("Humidity is HIGH, setting plant state to PROBLEM")
-                    else:
-                        self.humidity_status = STATE_OK
+                    if self._verbose_logging:
+                        _LOGGER.debug("Evaluating humidity sensor: value=%s, min=%s, max=%s", humid_value, min_humid, max_humid)
+                    
+                    # Use hysteresis-aware checking if enabled
+                    new_humid_status = self._check_sensor_with_hysteresis(
+                        humid_value, min_humid, max_humid, 
+                        self.humidity_status, STATE_LOW, STATE_HIGH, STATE_OK
+                    )
+                    
+                    # Check stabilization if enabled
+                    is_humid_issue = new_humid_status != STATE_OK
+                    humid_stabilized = True
+                    if self._stabilization_window > 0:
+                        humid_stabilized = self._check_sensor_stabilization("humidity", is_humid_issue)
+                    
+                    self.humidity_status = new_humid_status
+                    
+                    if is_humid_issue and humid_stabilized and self.humidity_trigger:
+                        new_state = STATE_PROBLEM
+                        _LOGGER.debug("Humidity is %s and stabilized, setting plant state to PROBLEM", new_humid_status)
+                    elif not is_humid_issue:
                         _LOGGER.debug("Humidity is OK")
                 except (ValueError, TypeError) as e:
                     _LOGGER.warning("Invalid value for humidity sensor: %s", str(e))
@@ -1866,19 +2003,27 @@ class PlantDevice(Entity):
                     co2_value = float(CO2)
                     min_co2 = float(self.min_CO2.native_value)
                     max_co2 = float(self.max_CO2.native_value)
-                    _LOGGER.debug("Evaluating CO2 sensor: value=%s, min=%s, max=%s", co2_value, min_co2, max_co2)
-                    if co2_value < min_co2:
-                        self.CO2_status = STATE_LOW
-                        if self.CO2_trigger:
-                            new_state = STATE_PROBLEM
-                            _LOGGER.debug("CO2 is LOW, setting plant state to PROBLEM")
-                    elif co2_value > max_co2:
-                        self.CO2_status = STATE_HIGH
-                        if self.CO2_trigger:
-                            new_state = STATE_PROBLEM
-                            _LOGGER.debug("CO2 is HIGH, setting plant state to PROBLEM")
-                    else:
-                        self.CO2_status = STATE_OK
+                    if self._verbose_logging:
+                        _LOGGER.debug("Evaluating CO2 sensor: value=%s, min=%s, max=%s", co2_value, min_co2, max_co2)
+                    
+                    # Use hysteresis-aware checking if enabled
+                    new_co2_status = self._check_sensor_with_hysteresis(
+                        co2_value, min_co2, max_co2, 
+                        self.CO2_status, STATE_LOW, STATE_HIGH, STATE_OK
+                    )
+                    
+                    # Check stabilization if enabled
+                    is_co2_issue = new_co2_status != STATE_OK
+                    co2_stabilized = True
+                    if self._stabilization_window > 0:
+                        co2_stabilized = self._check_sensor_stabilization("co2", is_co2_issue)
+                    
+                    self.CO2_status = new_co2_status
+                    
+                    if is_co2_issue and co2_stabilized and self.CO2_trigger:
+                        new_state = STATE_PROBLEM
+                        _LOGGER.debug("CO2 is %s and stabilized, setting plant state to PROBLEM", new_co2_status)
+                    elif not is_co2_issue:
                         _LOGGER.debug("CO2 is OK")
                 except (ValueError, TypeError) as e:
                     _LOGGER.warning("Invalid value for CO2 sensor: %s", str(e))
@@ -1891,19 +2036,27 @@ class PlantDevice(Entity):
                     dli_value = float(dli)
                     min_dli_val = float(self.min_dli.native_value)
                     max_dli_val = float(self.max_dli.native_value)
-                    _LOGGER.debug("Evaluating DLI sensor: value=%s, min=%s, max=%s", dli_value, min_dli_val, max_dli_val)
-                    if dli_value < min_dli_val:
-                        self.dli_status = STATE_LOW
-                        if self.dli_trigger:
-                            new_state = STATE_PROBLEM
-                            _LOGGER.debug("DLI is LOW, setting plant state to PROBLEM")
-                    elif dli_value > max_dli_val:
-                        self.dli_status = STATE_HIGH
-                        if self.dli_trigger:
-                            new_state = STATE_PROBLEM
-                            _LOGGER.debug("DLI is HIGH, setting plant state to PROBLEM")
-                    else:
-                        self.dli_status = STATE_OK
+                    if self._verbose_logging:
+                        _LOGGER.debug("Evaluating DLI sensor: value=%s, min=%s, max=%s", dli_value, min_dli_val, max_dli_val)
+                    
+                    # Use hysteresis-aware checking if enabled
+                    new_dli_status = self._check_sensor_with_hysteresis(
+                        dli_value, min_dli_val, max_dli_val, 
+                        self.dli_status, STATE_LOW, STATE_HIGH, STATE_OK
+                    )
+                    
+                    # Check stabilization if enabled
+                    is_dli_issue = new_dli_status != STATE_OK
+                    dli_stabilized = True
+                    if self._stabilization_window > 0:
+                        dli_stabilized = self._check_sensor_stabilization("dli", is_dli_issue)
+                    
+                    self.dli_status = new_dli_status
+                    
+                    if is_dli_issue and dli_stabilized and self.dli_trigger:
+                        new_state = STATE_PROBLEM
+                        _LOGGER.debug("DLI is %s and stabilized, setting plant state to PROBLEM", new_dli_status)
+                    elif not is_dli_issue:
                         _LOGGER.debug("DLI is OK")
                 except (ValueError, TypeError) as e:
                     _LOGGER.warning("Invalid value for DLI sensor: %s", str(e))
@@ -1917,19 +2070,27 @@ class PlantDevice(Entity):
                     water_value = float(water_consumption)
                     min_water = float(self.min_water_consumption.native_value)
                     max_water = float(self.max_water_consumption.native_value)
-                    _LOGGER.debug("Evaluating water consumption sensor: value=%s, min=%s, max=%s", water_value, min_water, max_water)
-                    if water_value < min_water:
-                        self.water_consumption_status = STATE_LOW
-                        if self.water_consumption_trigger:
-                            new_state = STATE_PROBLEM
-                            _LOGGER.debug("Water consumption is LOW, setting plant state to PROBLEM")
-                    elif water_value > max_water:
-                        self.water_consumption_status = STATE_HIGH
-                        if self.water_consumption_trigger:
-                            new_state = STATE_PROBLEM
-                            _LOGGER.debug("Water consumption is HIGH, setting plant state to PROBLEM")
-                    else:
-                        self.water_consumption_status = STATE_OK
+                    if self._verbose_logging:
+                        _LOGGER.debug("Evaluating water consumption sensor: value=%s, min=%s, max=%s", water_value, min_water, max_water)
+                    
+                    # Use hysteresis-aware checking if enabled
+                    new_water_status = self._check_sensor_with_hysteresis(
+                        water_value, min_water, max_water, 
+                        self.water_consumption_status, STATE_LOW, STATE_HIGH, STATE_OK
+                    )
+                    
+                    # Check stabilization if enabled
+                    is_water_issue = new_water_status != STATE_OK
+                    water_stabilized = True
+                    if self._stabilization_window > 0:
+                        water_stabilized = self._check_sensor_stabilization("water_consumption", is_water_issue)
+                    
+                    self.water_consumption_status = new_water_status
+                    
+                    if is_water_issue and water_stabilized and self.water_consumption_trigger:
+                        new_state = STATE_PROBLEM
+                        _LOGGER.debug("Water consumption is %s and stabilized, setting plant state to PROBLEM", new_water_status)
+                    elif not is_water_issue:
                         _LOGGER.debug("Water consumption is OK")
                 except (ValueError, TypeError) as e:
                     _LOGGER.warning("Invalid value for water consumption sensor: %s", str(e))
@@ -1943,19 +2104,27 @@ class PlantDevice(Entity):
                     fert_value = float(fertilizer_consumption)
                     min_fert = float(self.min_fertilizer_consumption.native_value)
                     max_fert = float(self.max_fertilizer_consumption.native_value)
-                    _LOGGER.debug("Evaluating fertilizer consumption sensor: value=%s, min=%s, max=%s", fert_value, min_fert, max_fert)
-                    if fert_value < min_fert:
-                        self.fertilizer_consumption_status = STATE_LOW
-                        if self.fertilizer_consumption_trigger:
-                            new_state = STATE_PROBLEM
-                            _LOGGER.debug("Fertilizer consumption is LOW, setting plant state to PROBLEM")
-                    elif fert_value > max_fert:
-                        self.fertilizer_consumption_status = STATE_HIGH
-                        if self.fertilizer_consumption_trigger:
-                            new_state = STATE_PROBLEM
-                            _LOGGER.debug("Fertilizer consumption is HIGH, setting plant state to PROBLEM")
-                    else:
-                        self.fertilizer_consumption_status = STATE_OK
+                    if self._verbose_logging:
+                        _LOGGER.debug("Evaluating fertilizer consumption sensor: value=%s, min=%s, max=%s", fert_value, min_fert, max_fert)
+                    
+                    # Use hysteresis-aware checking if enabled
+                    new_fert_status = self._check_sensor_with_hysteresis(
+                        fert_value, min_fert, max_fert, 
+                        self.fertilizer_consumption_status, STATE_LOW, STATE_HIGH, STATE_OK
+                    )
+                    
+                    # Check stabilization if enabled
+                    is_fert_issue = new_fert_status != STATE_OK
+                    fert_stabilized = True
+                    if self._stabilization_window > 0:
+                        fert_stabilized = self._check_sensor_stabilization("fertilizer_consumption", is_fert_issue)
+                    
+                    self.fertilizer_consumption_status = new_fert_status
+                    
+                    if is_fert_issue and fert_stabilized and self.fertilizer_consumption_trigger:
+                        new_state = STATE_PROBLEM
+                        _LOGGER.debug("Fertilizer consumption is %s and stabilized, setting plant state to PROBLEM", new_fert_status)
+                    elif not is_fert_issue:
                         _LOGGER.debug("Fertilizer consumption is OK")
                 except (ValueError, TypeError) as e:
                     _LOGGER.warning("Invalid value for fertilizer consumption sensor: %s", str(e))
@@ -1969,19 +2138,27 @@ class PlantDevice(Entity):
                     power_value = float(power_consumption)
                     min_power = float(self.min_power_consumption.native_value)
                     max_power = float(self.max_power_consumption.native_value)
-                    _LOGGER.debug("Evaluating power consumption sensor: value=%s, min=%s, max=%s", power_value, min_power, max_power)
-                    if power_value < min_power:
-                        self.power_consumption_status = STATE_LOW
-                        if self.power_consumption_trigger:
-                            new_state = STATE_PROBLEM
-                            _LOGGER.debug("Power consumption is LOW, setting plant state to PROBLEM")
-                    elif power_value > max_power:
-                        self.power_consumption_status = STATE_HIGH
-                        if self.power_consumption_trigger:
-                            new_state = STATE_PROBLEM
-                            _LOGGER.debug("Power consumption is HIGH, setting plant state to PROBLEM")
-                    else:
-                        self.power_consumption_status = STATE_OK
+                    if self._verbose_logging:
+                        _LOGGER.debug("Evaluating power consumption sensor: value=%s, min=%s, max=%s", power_value, min_power, max_power)
+                    
+                    # Use hysteresis-aware checking if enabled
+                    new_power_status = self._check_sensor_with_hysteresis(
+                        power_value, min_power, max_power, 
+                        self.power_consumption_status, STATE_LOW, STATE_HIGH, STATE_OK
+                    )
+                    
+                    # Check stabilization if enabled
+                    is_power_issue = new_power_status != STATE_OK
+                    power_stabilized = True
+                    if self._stabilization_window > 0:
+                        power_stabilized = self._check_sensor_stabilization("power_consumption", is_power_issue)
+                    
+                    self.power_consumption_status = new_power_status
+                    
+                    if is_power_issue and power_stabilized and self.power_consumption_trigger:
+                        new_state = STATE_PROBLEM
+                        _LOGGER.debug("Power consumption is %s and stabilized, setting plant state to PROBLEM", new_power_status)
+                    elif not is_power_issue:
                         _LOGGER.debug("Power consumption is OK")
                 except (ValueError, TypeError) as e:
                     _LOGGER.warning("Invalid value for power consumption sensor: %s", str(e))
@@ -1995,30 +2172,60 @@ class PlantDevice(Entity):
                     ph_value = float(ph)
                     min_ph_val = float(self.min_ph.native_value)
                     max_ph_val = float(self.max_ph.native_value)
-                    _LOGGER.debug("Evaluating pH sensor: value=%s, min=%s, max=%s", ph_value, min_ph_val, max_ph_val)
-                    if ph_value < min_ph_val:
-                        self.ph_status = STATE_LOW
-                        if self.ph_trigger:
-                            new_state = STATE_PROBLEM
-                            _LOGGER.debug("pH is LOW, setting plant state to PROBLEM")
-                    elif ph_value > max_ph_val:
-                        self.ph_status = STATE_HIGH
-                        if self.ph_trigger:
-                            new_state = STATE_PROBLEM
-                            _LOGGER.debug("pH is HIGH, setting plant state to PROBLEM")
-                    else:
-                        self.ph_status = STATE_OK
+                    if self._verbose_logging:
+                        _LOGGER.debug("Evaluating pH sensor: value=%s, min=%s, max=%s", ph_value, min_ph_val, max_ph_val)
+                    
+                    # Use hysteresis-aware checking if enabled
+                    new_ph_status = self._check_sensor_with_hysteresis(
+                        ph_value, min_ph_val, max_ph_val, 
+                        self.ph_status, STATE_LOW, STATE_HIGH, STATE_OK
+                    )
+                    
+                    # Check stabilization if enabled
+                    is_ph_issue = new_ph_status != STATE_OK
+                    ph_stabilized = True
+                    if self._stabilization_window > 0:
+                        ph_stabilized = self._check_sensor_stabilization("ph", is_ph_issue)
+                    
+                    self.ph_status = new_ph_status
+                    
+                    if is_ph_issue and ph_stabilized and self.ph_trigger:
+                        new_state = STATE_PROBLEM
+                        _LOGGER.debug("pH is %s and stabilized, setting plant state to PROBLEM", new_ph_status)
+                    elif not is_ph_issue:
                         _LOGGER.debug("pH is OK")
                 except (ValueError, TypeError) as e:
                     _LOGGER.warning("Invalid value for pH sensor: %s", str(e))
 
-        # Set the state
-        self._attr_state = new_state
-        if not known_state:
-            self._attr_state = STATE_UNKNOWN
-            _LOGGER.debug("Plant %s has no known sensor data, setting state to UNKNOWN", self.name)
+        # Apply debounce if configured (Phase 1)
+        if self._status_debounce_time > 0:
+            import datetime
+            now = datetime.datetime.now()
+            if self._pending_status != new_state:
+                # Status is changing, set pending status and timestamp
+                self._pending_status = new_state
+                self._last_status_change = now
+                if self._verbose_logging:
+                    _LOGGER.debug("Status change to %s pending for %s seconds", new_state, self._status_debounce_time)
+            elif self._last_status_change and (now - self._last_status_change).seconds >= self._status_debounce_time:
+                # Debounce time has passed, apply the pending status
+                old_state = self._attr_state
+                self._attr_state = new_state
+                self._pending_status = None
+                self._last_status_change = now
+                if self._verbose_logging or old_state != new_state:
+                    _LOGGER.info("Plant %s state updated from %s to %s after debounce", self.name, old_state, new_state)
+            # Else: Keep current state until debounce time passes
         else:
-            _LOGGER.debug("Plant %s state updated to %s", self.name, new_state)
+            # No debounce, apply state immediately
+            old_state = self._attr_state
+            self._attr_state = new_state
+            if not known_state:
+                self._attr_state = STATE_UNKNOWN
+                if self._verbose_logging or old_state != STATE_UNKNOWN:
+                    _LOGGER.info("Plant %s state changed from %s to UNKNOWN", self.name, old_state)
+            elif self._verbose_logging or old_state != new_state:
+                _LOGGER.info("Plant %s state changed from %s to %s", self.name, old_state, new_state)
 
 
 

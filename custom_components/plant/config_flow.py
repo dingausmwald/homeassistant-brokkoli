@@ -2408,6 +2408,32 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 )
             ] = cv.boolean
 
+            # Add new status stabilization options
+            data_schema[
+                vol.Optional(
+                    "status_debounce_time",
+                    default=self.entry.options.get("status_debounce_time", 0),
+                )
+            ] = cv.positive_int
+            data_schema[
+                vol.Optional(
+                    "hysteresis_percentage",
+                    default=self.entry.options.get("hysteresis_percentage", 0.0),
+                )
+            ] = vol.Coerce(float)
+            data_schema[
+                vol.Optional(
+                    "stabilization_window",
+                    default=self.entry.options.get("stabilization_window", 0),
+                )
+            ] = cv.positive_int
+            data_schema[
+                vol.Optional(
+                    "verbose_logging",
+                    default=self.entry.options.get("verbose_logging", False),
+                )
+            ] = cv.boolean
+
         return self.async_show_form(step_id="init", data_schema=vol.Schema(data_schema))
 
     async def update_plant_options(

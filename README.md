@@ -133,6 +133,21 @@ Customize which sensor violations trigger problem states:
 3. Click **Configure**
 4. Choose which threshold violations should trigger alerts
 
+### Status Stabilization
+Prevent rapid state changes (flickering) between "Problem" and "OK" states with these advanced stabilization features:
+
+- **Status Debounce**: Set a minimum time that a status change must be sustained before it's applied
+- **Hysteresis**: Add a margin around threshold values to prevent rapid switching when sensor values are near thresholds
+- **Stabilization Window**: Require sensor issues to be sustained for a minimum time before triggering problem states
+- **Verbose Logging**: Enable detailed logging for debugging status changes
+
+To configure these features:
+
+1. Navigate to **Settings** → **Devices & Services** → **Plant Monitor**
+2. Select your plant device
+3. Click **Configure**
+4. Adjust the status stabilization settings in the configuration panel
+
 ### Strain Management
 Update cannabis strain and refresh data from Seedfinder:
 

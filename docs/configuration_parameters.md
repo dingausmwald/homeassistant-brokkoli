@@ -46,6 +46,14 @@ Each sensor type has configurable minimum and maximum thresholds:
 - **pot_size**: Size of the pot in liters (default: 0.4L)
 - **water_capacity**: Water capacity percentage (default: 50%)
 
+### Status Stabilization Configuration
+These settings help prevent rapid state changes (flickering) between "Problem" and "OK" states by adding stabilization mechanisms:
+
+- **status_debounce_time**: Minimum time (in seconds) that a status change must be sustained before it's applied (default: 0 seconds, 0 = disabled)
+- **hysteresis_percentage**: Percentage of the threshold range to use as hysteresis margin to prevent rapid switching near thresholds (default: 0.0%, 0 = disabled)
+- **stabilization_window**: Minimum time (in seconds) that a sensor issue must be sustained before triggering a problem state (default: 0 seconds, 0 = disabled)
+- **verbose_logging**: Enable verbose logging for debugging status changes (default: false, true = more detailed logs)
+
 ## Tent Configuration Options
 
 ### Basic Tent Information
