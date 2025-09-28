@@ -105,6 +105,71 @@ def test_plant_change_tent():
     plant.replace_sensors.assert_called_once_with(["sensor.light", "sensor.soil_moisture"])
 
 
+def test_plant_creation():
+    """Test the creation of a plant with basic configuration."""
+    # Create mock objects
+    hass = Mock(spec=HomeAssistant)
+    config = Mock(spec=ConfigEntry)
+    
+    # Set up config data
+    config.data = {
+        "plant_info": {
+            "name": "Test Plant",
+            "strain": "Test Strain",
+            "device_type": "plant"
+        }
+    }
+    config.options = {}
+    config.entry_id = "test_entry_id"
+    
+    # Create plant device
+    with patch('custom_components.plant.PlantDevice._get_next_id'):
+        plant = PlantDevice(hass, config)
+    
+    # Verify the plant is created with the correct attributes
+    assert plant.name == "Test Plant"
+    assert plant.device_type == "plant"
+
+
+def test_plant_sensor_assignment():
+    """Test the assignment of sensors to a plant during creation."""
+    # Create mock objects
+    hass = Mock(spec=HomeAssistant)
+    config = Mock(spec=ConfigEntry)
+    
+    # Set up config data with sensor assignments
+    config.data = {
+        "plant_info": {
+            "name": "Test Plant",
+            "strain": "Test Strain",
+            "device_type": "plant",
+            "temperature_sensor": "sensor.temperature",
+            "moisture_sensor": "sensor.moisture"
+        }
+    }
+    config.options = {}
+    config.entry_id = "test_entry_id"
+
+    # Mock sensor entities
+    temperature_sensor = Mock()
+    temperature_sensor.entity_id = "sensor.temperature"
+    moisture_sensor = Mock()
+    moisture_sensor.entity_id = "sensor.moisture"
+    
+    hass.states.get.side_effect = lambda entity_id: {
+        "sensor.temperature": temperature_sensor,
+        "sensor.moisture": moisture_sensor,
+    }.get(entity_id)
+    
+    # Create plant device
+    with patch('custom_components.plant.PlantDevice._get_next_id'):
+        plant = PlantDevice(hass, config)
+    
+    # Verify the sensor assignments
+    assert plant.sensor_temperature.entity_id == "sensor.temperature"
+    assert plant.sensor_moisture.entity_id == "sensor.moisture"
+
+
 def test_plant_change_tent_service():
     """Test the change_tent service functionality."""
     # This test would verify the service integration, but requires Home Assistant environment

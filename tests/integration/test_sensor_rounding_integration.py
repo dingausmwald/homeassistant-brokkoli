@@ -3,6 +3,9 @@ import importlib.util
 import sys
 from types import SimpleNamespace
 from pathlib import Path
+from unittest.mock import patch
+
+import requests_mock
 
 
 class DummyConfigEntry:
@@ -42,10 +45,11 @@ def _load(name: str, rel_path: str):
     return module
 
 
-def test_plant_device_decimals_for_with_overrides():
+
+@patch("homeassistant.core.HomeAssistant.async_start")
+def test_plant_device_decimals_for_with_overrides(mock_async_start):
     # Inject a minimal dummy module for homeassistant.const used by const.py
     dummy_ha_const = type(sys)("homeassistant.const")
-    # Provide minimal symbols required by imports
     setattr(dummy_ha_const, "ATTR_ICON", "mdi:icon")
     setattr(dummy_ha_const, "Platform", SimpleNamespace(NUMBER="number", SENSOR="sensor", SELECT="select", TEXT="text"))
     setattr(dummy_ha_const, "ATTR_ENTITY_PICTURE", "entity_picture")

@@ -30,7 +30,6 @@ def _setup_ha_modules():
 def test_export_functionality():
     """Test export functionality."""
     _setup_ha_modules()
-    
     # Load required modules
     const = _load_module("custom_components.plant.const", "custom_components/plant/const.py")
     
@@ -45,7 +44,6 @@ def test_export_functionality():
 def test_import_functionality():
     """Test import functionality."""
     _setup_ha_modules()
-    
     # Load required modules
     const = _load_module("custom_components.plant.const", "custom_components/plant/const.py")
     
@@ -56,7 +54,6 @@ def test_import_functionality():
 def test_plant_creation_persistence():
     """Test that created plants persist data correctly."""
     _setup_ha_modules()
-    
     # Load required modules
     const = _load_module("custom_components.plant.const", "custom_components/plant/const.py")
     
@@ -67,7 +64,6 @@ def test_plant_creation_persistence():
 def test_configuration_persistence():
     """Test that configuration data persists correctly."""
     _setup_ha_modules()
-    
     # Load required modules
     const = _load_module("custom_components.plant.const", "custom_components/plant/const.py")
     
@@ -90,7 +86,6 @@ def test_configuration_persistence():
 def test_sensor_data_persistence():
     """Test that sensor data persists correctly."""
     _setup_ha_modules()
-    
     # Load required modules
     const = _load_module("custom_components.plant.const", "custom_components/plant/const.py")
     
@@ -114,7 +109,6 @@ def test_sensor_data_persistence():
 def test_consumption_data_persistence():
     """Test that consumption data persists correctly."""
     _setup_ha_modules()
-    
     # Load required modules
     const = _load_module("custom_components.plant.const", "custom_components/plant/const.py")
     
@@ -132,7 +126,6 @@ def test_consumption_data_persistence():
 def test_plant_attributes_persistence():
     """Test that extended plant attributes persist correctly."""
     _setup_ha_modules()
-    
     # Load required modules
     const = _load_module("custom_components.plant.const", "custom_components/plant/const.py")
     

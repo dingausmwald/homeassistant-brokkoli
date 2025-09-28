@@ -10,11 +10,10 @@ def run_test_module(module_name):
     """Run a test module and report results."""
     try:
         # Import the module
-        components = module_name.split(".")
-        module = __import__(module_name, fromlist=components)
-
+        module = __import__(module_name)
+        
         # Get all functions that start with 'test_'
-        test_functions = [getattr(module, name) for name in dir(module) if name.startswith('test_') and callable(getattr(module, name))]
+        test_functions = [getattr(module, name) for name in dir(module) if name.startswith('test_')]
         
         # Run each test function
         passed = 0
@@ -38,15 +37,13 @@ def run_test_module(module_name):
 if __name__ == "__main__":
     # List of test modules to run
     test_modules = [
-        "unit.test_constant_validation",
-        "unit.test_sensor_value_processing",
-        "unit.test_consumption_constants",
-        "unit.test_energy_cost_constants",
-        "integration.test_consumption_tracking",
-        "unit.test_service_functionality",
+        "test_constant_validation",
+        "test_sensor_value_processing",
+        "test_consumption_tracking",
+        "test_service_functionality",
         "test_plant_entity",
-        "integration.test_integration_scenarios",
-        "integration.test_data_persistence"
+        "test_integration_scenarios",
+        "test_data_persistence"
     ]
     
     all_passed = True

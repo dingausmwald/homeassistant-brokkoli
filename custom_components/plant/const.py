@@ -361,6 +361,7 @@ DEFAULT_AGGREGATIONS = {
     'total_fertilizer_consumption': AGGREGATION_ORIGINAL,
     'power_consumption': AGGREGATION_MEAN,
     'total_power_consumption': AGGREGATION_ORIGINAL,
+    'energy_cost': AGGREGATION_MEAN,  # Neue Default-Aggregation für Energiekosten
     'health': AGGREGATION_MEAN,  # Hinzugefügt für Health Helper
     'ph': AGGREGATION_MEDIAN,  # Neue Default-Aggregation für pH
 }
@@ -411,6 +412,9 @@ CONF_DEFAULT_MIN_POWER_CONSUMPTION = "default_min_power_consumption"
 CONF_DEFAULT_MAX_POWER_CONSUMPTION = "default_max_power_consumption"
 CONF_DEFAULT_MAX_PH = "default_max_ph"  # Neue Konstanten für pH
 CONF_DEFAULT_MIN_PH = "default_min_ph"
+
+# Neue Konstanten für kWh Preis
+CONF_DEFAULT_KWH_PRICE = "default_kwh_price"
 
 ATTR_WATER_CONSUMPTION = "water_consumption"
 ATTR_FERTILIZER_CONSUMPTION = "fertilizer_consumption"

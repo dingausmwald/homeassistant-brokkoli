@@ -19,7 +19,7 @@
   "requirements": [
     "async-timeout>=4.0.2"
   ],
-  "version": "2025.4.0-beta1",
+  "version": "2025.4.0",
   "translations": [
     {
       "platform": "config_flow",

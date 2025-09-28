@@ -4,14 +4,17 @@ Test script for sensor mapping functionality.
 """
 
 import sys
+sys.path.append("D:\\\\Python\\\\2\\\\homeassistant-brokkoli")
+
 import os
 from unittest.mock import Mock
 
 # Add the custom_components directory to the path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'custom_components'))
 
-from plant.const import (
-    FLOW_SENSOR_TEMPERATURE,
+#sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'custom_components'))
+
+
+from custom_components.plant.const import (
     FLOW_SENSOR_MOISTURE,
     FLOW_SENSOR_CONDUCTIVITY,
     FLOW_SENSOR_ILLUMINANCE,

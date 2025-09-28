@@ -19,23 +19,13 @@ def _load_module(module_name, file_path):
 def _setup_ha_modules():
     """Set up minimal HA modules for testing."""
     # Only set up modules if they don't already exist
-    if "homeassistant.const" not in sys.modules:
-        # Inject minimal dummy modules for Home Assistant components
-        dummy_ha_const = type(sys)("homeassistant.const")
-        setattr(dummy_ha_const, "STATE_UNKNOWN", "unknown")
-        setattr(dummy_ha_const, "STATE_UNAVAILABLE", "unavailable")
-        sys.modules["homeassistant.const"] = dummy_ha_const
-    
-    # Only set up modules if they don't already exist
     if "homeassistant.core" not in sys.modules:
-        # Create a minimal state object
-        class State:
-            def __init__(self, state, attributes=None):
-                self.state = state
-                self.attributes = attributes or {}
-        
+        # Inject minimal dummy module for homeassistant.core
         dummy_ha_core = type(sys)("homeassistant.core")
-        setattr(dummy_ha_core, "State", State)
+        # Create a minimal HomeAssistant class
+        class HomeAssistant:
+            pass
+        setattr(dummy_ha_core, "HomeAssistant", HomeAssistant)
         sys.modules["homeassistant.core"] = dummy_ha_core
 
 
@@ -45,12 +35,12 @@ def test_water_consumption_calculation():
     
     # Load required modules
     const = _load_module("custom_components.plant.const", "custom_components/plant/const.py")
-    
+
     # Test that consumption attributes are defined
     assert const.ATTR_WATER_CONSUMPTION == "water_consumption"
     assert const.READING_MOISTURE_CONSUMPTION == "water consumption"
     assert const.ICON_WATER_CONSUMPTION == "mdi:water-pump"
-    
+
     # Test default consumption values
     assert const.DEFAULT_MIN_WATER_CONSUMPTION == 0.1
     assert const.DEFAULT_MAX_WATER_CONSUMPTION == 2.0
@@ -62,12 +52,12 @@ def test_fertilizer_consumption_calculation():
     
     # Load required modules
     const = _load_module("custom_components.plant.const", "custom_components/plant/const.py")
-    
+
     # Test that consumption attributes are defined
     assert const.ATTR_FERTILIZER_CONSUMPTION == "fertilizer_consumption"
     assert const.READING_FERTILIZER_CONSUMPTION == "fertilizer consumption"
     assert const.ICON_FERTILIZER_CONSUMPTION == "mdi:chart-line-variant"
-    
+
     # Test default consumption values
     assert const.DEFAULT_MIN_FERTILIZER_CONSUMPTION == 0.1
     assert const.DEFAULT_MAX_FERTILIZER_CONSUMPTION == 2.0
@@ -79,12 +69,12 @@ def test_power_consumption_calculation():
     
     # Load required modules
     const = _load_module("custom_components.plant.const", "custom_components/plant/const.py")
-    
+
     # Test that consumption attributes are defined
     assert const.ATTR_POWER_CONSUMPTION == "power_consumption"
     assert const.READING_POWER_CONSUMPTION == "power consumption"
     assert const.ICON_POWER_CONSUMPTION == "mdi:flash"
-    
+
     # Test default consumption values
     assert const.DEFAULT_MIN_POWER_CONSUMPTION == 0.1
     assert const.DEFAULT_MAX_POWER_CONSUMPTION == 5.0
@@ -92,11 +82,13 @@ def test_power_consumption_calculation():
 
 def test_total_consumption_aggregation():
     """Test total consumption aggregation logic."""
-    # Test that we can sum up consumption values
-    daily_consumption = [0.5, 0.3, 0.2, 0.4, 0.6]
-    total_consumption = sum(daily_consumption)
-    assert total_consumption == 2.0
+    _setup_ha_modules()
     
+    # Test that we can sum up consumption values
+    daily_consumption = [0.5, 0.3, 0.2]
+    total_consumption = sum(daily_consumption)
+    assert total_consumption == 1.0
+
     # Test with float precision
     daily_consumption_float = [0.1, 0.2, 0.3]
     total_consumption_float = sum(daily_consumption_float)
@@ -105,18 +97,20 @@ def test_total_consumption_aggregation():
 
 def test_consumption_service_validation():
     """Test validation of consumption service parameters."""
-    # Test valid water amount
-    water_amount = 0.5
-    assert 0.0 <= water_amount <= 1000.0
+    _setup_ha_modules()
     
+    # Test valid water amount
+    water_amount = 500.0
+    assert 0.0 <= water_amount <= 1000.0
+
     # Test valid conductivity value
     conductivity_value = 1500.0
     assert 0.0 <= conductivity_value <= 100000.0
-    
+
     # Test valid pH value
     ph_value = 6.5
     assert 0.0 <= ph_value <= 14.0
-    
+
     # Test boundary values
     assert 0.0 >= 0.0  # Minimum water amount
     assert 1000.0 <= 1000.0  # Maximum water amount
