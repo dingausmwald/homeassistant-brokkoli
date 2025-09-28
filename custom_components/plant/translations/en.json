@@ -457,5 +457,19 @@
         }
       }
     }
+  },
+  "issues": {
+    "sensor_unavailable": {
+      "title": "Sensor unavailable",
+      "description": "The {sensor_type} sensor for plant {plant_name} is currently unavailable."
+    },
+    "invalid_configuration": {
+      "title": "Invalid configuration",
+      "description": "Plant {plant_name} has an invalid configuration: {error}"
+    },
+    "missing_sensor": {
+      "title": "Missing sensor",
+      "description": "The {sensor_type} sensor for plant {plant_name} is missing."
+    }
   }
 }

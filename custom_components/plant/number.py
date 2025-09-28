@@ -26,6 +26,7 @@ from .const import (
     ATTR_IS_NEW_PLANT,
     DEVICE_TYPE_CYCLE,
     DEVICE_TYPE_PLANT,
+    DEVICE_TYPE_TENT,
     AGGREGATION_MEAN,
     AGGREGATION_MIN,
     AGGREGATION_MAX,
@@ -67,128 +68,141 @@ from .plant_thresholds import (
 
 _LOGGER = logging.getLogger(__name__)
 
+
 async def async_setup_entry(
-    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
-):
-    """Set up Number from a config entry."""
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> bool:
+    """Set up Threshold numbers from a config entry."""
     plant = hass.data[DOMAIN][entry.entry_id][ATTR_PLANT]
     
-    # Pot Size
-    pot_size = PotSizeNumber(
-        hass,
-        entry,
-        plant,
-    )
+    entities = []
     
-    # Water Capacity
-    water_capacity = WaterCapacityNumber(
-        hass,
-        entry,
-        plant,
-    )
+    # Initialize variables for all device types
+    pot_size = None
+    water_capacity = None
+    flowering_duration = None
+    health_number = None
+    max_moisture = None
+    min_moisture = None
+    max_temperature = None
+    min_temperature = None
+    max_conductivity = None
+    min_conductivity = None
+    max_illuminance = None
+    min_illuminance = None
+    max_humidity = None
+    min_humidity = None
+    max_CO2 = None
+    min_CO2 = None
+    max_dli = None
+    min_dli = None
+    max_water_consumption = None
+    min_water_consumption = None
+    max_fertilizer_consumption = None
+    min_fertilizer_consumption = None
+    max_power_consumption = None
+    min_power_consumption = None
+    max_ph = None
+    min_ph = None
     
-    # Flowering Duration
-    flowering_duration = FloweringDurationNumber(
-        hass,
-        entry,
-        plant,
-    )
-    
-    # Health Rating
-    health_number = PlantHealthNumber(
-        hass,
-        entry,
-        plant,
-    )
-    
-    # Min/Max Thresholds
-    max_moisture = PlantMaxMoisture(hass, entry, plant)
-    min_moisture = PlantMinMoisture(hass, entry, plant)
-    max_temperature = PlantMaxTemperature(hass, entry, plant)
-    min_temperature = PlantMinTemperature(hass, entry, plant)
-    max_conductivity = PlantMaxConductivity(hass, entry, plant)
-    min_conductivity = PlantMinConductivity(hass, entry, plant)
-    max_illuminance = PlantMaxIlluminance(hass, entry, plant)
-    min_illuminance = PlantMinIlluminance(hass, entry, plant)
-    max_humidity = PlantMaxHumidity(hass, entry, plant)
-    min_humidity = PlantMinHumidity(hass, entry, plant)
-    max_CO2 = PlantMaxCO2(hass, entry, plant)
-    min_CO2 = PlantMinCO2(hass, entry, plant)
-    max_dli = PlantMaxDli(hass, entry, plant)
-    min_dli = PlantMinDli(hass, entry, plant)
+    # Helper Numbers - nur für Plants und Cycles, nicht für Tents
+    if plant.device_type != DEVICE_TYPE_TENT:
+        pot_size = PotSizeNumber(hass, entry, plant)
+        water_capacity = WaterCapacityNumber(hass, entry, plant)
+        flowering_duration = FloweringDurationNumber(hass, entry, plant)
+        health_number = PlantHealthNumber(hass, entry, plant)
+        
+        entities.extend([pot_size, water_capacity, flowering_duration, health_number])
+        
+        # Min/Max Thresholds
+        max_moisture = PlantMaxMoisture(hass, entry, plant)
+        min_moisture = PlantMinMoisture(hass, entry, plant)
+        max_temperature = PlantMaxTemperature(hass, entry, plant)
+        min_temperature = PlantMinTemperature(hass, entry, plant)
+        max_conductivity = PlantMaxConductivity(hass, entry, plant)
+        min_conductivity = PlantMinConductivity(hass, entry, plant)
+        max_illuminance = PlantMaxIlluminance(hass, entry, plant)
+        min_illuminance = PlantMinIlluminance(hass, entry, plant)
+        max_humidity = PlantMaxHumidity(hass, entry, plant)
+        min_humidity = PlantMinHumidity(hass, entry, plant)
+        max_CO2 = PlantMaxCO2(hass, entry, plant)
+        min_CO2 = PlantMinCO2(hass, entry, plant)
+        max_dli = PlantMaxDli(hass, entry, plant)
+        min_dli = PlantMinDli(hass, entry, plant)
 
-    # Water/Fertilizer/Power Consumption Thresholds
-    max_water_consumption = PlantMaxWaterConsumption(hass, entry, plant)
-    min_water_consumption = PlantMinWaterConsumption(hass, entry, plant)
-    max_fertilizer_consumption = PlantMaxFertilizerConsumption(hass, entry, plant)
-    min_fertilizer_consumption = PlantMinFertilizerConsumption(hass, entry, plant)
-    max_power_consumption = PlantMaxPowerConsumption(hass, entry, plant)
-    min_power_consumption = PlantMinPowerConsumption(hass, entry, plant)
+        # Water/Fertilizer/Power Consumption Thresholds
+        max_water_consumption = PlantMaxWaterConsumption(hass, entry, plant)
+        min_water_consumption = PlantMinWaterConsumption(hass, entry, plant)
+        max_fertilizer_consumption = PlantMaxFertilizerConsumption(hass, entry, plant)
+        min_fertilizer_consumption = PlantMinFertilizerConsumption(hass, entry, plant)
+        max_power_consumption = PlantMaxPowerConsumption(hass, entry, plant)
+        min_power_consumption = PlantMinPowerConsumption(hass, entry, plant)
 
-    # pH Thresholds
-    max_ph = PlantMaxPh(hass, entry, plant)
-    min_ph = PlantMinPh(hass, entry, plant)
+        # pH Thresholds
+        max_ph = PlantMaxPh(hass, entry, plant)
+        min_ph = PlantMinPh(hass, entry, plant)
 
-    entities = [
-        pot_size,
-        water_capacity,
-        flowering_duration,
-        health_number,
-        max_moisture,
-        min_moisture,
-        max_temperature,
-        min_temperature,
-        max_conductivity,
-        min_conductivity,
-        max_illuminance,
-        min_illuminance,
-        max_humidity,
-        min_humidity,
-        max_CO2,
-        min_CO2,
-        max_dli,
-        min_dli,
-        max_water_consumption,
-        min_water_consumption,
-        max_fertilizer_consumption,
-        min_fertilizer_consumption,
-        max_power_consumption,
-        min_power_consumption,
-        max_ph,
-        min_ph,
-    ]
+        entities.extend([
+            max_moisture,
+            min_moisture,
+            max_temperature,
+            min_temperature,
+            max_conductivity,
+            min_conductivity,
+            max_illuminance,
+            min_illuminance,
+            max_humidity,
+            min_humidity,
+            max_CO2,
+            min_CO2,
+            max_dli,
+            min_dli,
+            max_water_consumption,
+            min_water_consumption,
+            max_fertilizer_consumption,
+            min_fertilizer_consumption,
+            max_power_consumption,
+            min_power_consumption,
+            max_ph,
+            min_ph,
+        ])
     
     async_add_entities(entities)
     
-    # Add entities to plant device
-    plant.add_pot_size(pot_size)
-    plant.add_water_capacity(water_capacity)
-    plant.add_flowering_duration(flowering_duration)
-    plant.add_health_number(health_number)
-    plant.add_thresholds(
-        max_moisture=max_moisture,
-        min_moisture=min_moisture,
-        max_temperature=max_temperature,
-        min_temperature=min_temperature,
-        max_conductivity=max_conductivity,
-        min_conductivity=min_conductivity,
-        max_illuminance=max_illuminance,
-        min_illuminance=min_illuminance,
-        max_humidity=max_humidity,
-        min_humidity=min_humidity,
-        max_CO2=max_CO2,
-        min_CO2=min_CO2,
-        max_dli=max_dli,
-        min_dli=min_dli,
-        max_water_consumption=max_water_consumption,
-        min_water_consumption=min_water_consumption,
-        max_fertilizer_consumption=max_fertilizer_consumption,
-        min_fertilizer_consumption=min_fertilizer_consumption,
-        max_power_consumption=max_power_consumption,
-        min_power_consumption=min_power_consumption,
-        max_ph=max_ph,
-        min_ph=min_ph,
-    )
+    # Add entities to plant device - nur für Plants und Cycles, nicht für Tents
+    if plant.device_type != DEVICE_TYPE_TENT:
+        plant.add_pot_size(pot_size)
+        plant.add_water_capacity(water_capacity)
+        plant.add_flowering_duration(flowering_duration)
+        plant.add_health_number(health_number)
+        
+        # Thresholds nur für Plants und Cycles hinzufügen
+        plant.add_thresholds(
+            max_moisture=max_moisture,
+            min_moisture=min_moisture,
+            max_temperature=max_temperature,
+            min_temperature=min_temperature,
+            max_conductivity=max_conductivity,
+            min_conductivity=min_conductivity,
+            max_illuminance=max_illuminance,
+            min_illuminance=min_illuminance,
+            max_humidity=max_humidity,
+            min_humidity=min_humidity,
+            max_CO2=max_CO2,
+            min_CO2=min_CO2,
+            max_dli=max_dli,
+            min_dli=min_dli,
+            max_water_consumption=max_water_consumption,
+            min_water_consumption=min_water_consumption,
+            max_fertilizer_consumption=max_fertilizer_consumption,
+            min_fertilizer_consumption=min_fertilizer_consumption,
+            max_power_consumption=max_power_consumption,
+            min_power_consumption=min_power_consumption,
+            max_ph=max_ph,
+            min_ph=min_ph,
+        )
 
     return True
 

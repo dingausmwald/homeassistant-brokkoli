@@ -16,15 +16,47 @@ tests/
 ├── test_constant_validation.py           # Constant definition validation
 ├── test_consumption_tracking.py          # Consumption calculations and services
 ├── test_data_persistence.py              # Data storage and restoration
+├── test_device_removal.py                # Device removal functionality
+├── test_diagnostics.py                   # Diagnostic information
 ├── test_integration_scenarios.py         # End-to-end integration testing
+├── test_plant_device_dli.py              # Plant DLI calculation
 ├── test_plant_entity.py                  # Plant device entity behavior
+├── test_plant_tent_assignment.py         # Plant to tent assignment
+├── test_plant_tent_integration.py        # Plant tent integration
+├── test_repairs.py                       # Repair functionality
 ├── test_rounding_applies_current_sensors.py  # Sensor rounding validation
 ├── test_sensor_compile_rounding.py       # Sensor compilation rounding tests
 ├── test_sensor_configuration.py          # Sensor configuration validation
 ├── test_sensor_rounding_integration.py   # Sensor rounding integration tests
 ├── test_sensor_value_processing.py       # Sensor value handling and conversion
 ├── test_service_functionality.py         # Service functionality tests
-└── run_tests.py                          # Test runner script
+├── run_tests.py                          # Test runner script
+├── integration/                          # Integration tests
+│   ├── test_consumption_tracking.py      # Consumption tracking integration
+│   ├── test_data_persistence.py          # Data persistence integration
+│   ├── test_integration_scenarios.py     # Integration scenarios
+│   └── test_sensor_rounding_integration.py  # Sensor rounding integration
+├── unit/                                 # Unit tests
+│   ├── test_constant_validation.py       # Constant validation
+│   ├── test_consumption_constants.py     # Consumption constants
+│   ├── test_consumption_sensors.py       # Consumption sensors
+│   ├── test_energy_cost.py               # Energy cost calculation
+│   ├── test_energy_cost_constants.py     # Energy cost constants
+│   ├── test_sensor_compile_rounding.py   # Sensor compilation rounding
+│   ├── test_sensor_configuration.py      # Sensor configuration
+│   ├── test_sensor_value_processing.py   # Sensor value processing
+│   ├── test_service_functionality.py     # Service functionality
+│   ├── test_service_schemas.py           # Service schemas
+│   └── test_total_consumption_sensors.py # Total consumption sensors
+└── tent_specific/                        # Tent-specific tests
+    ├── test_tent_consumption_tracking.py # Tent consumption tracking
+    ├── test_tent_data_persistence.py     # Tent data persistence
+    ├── test_tent_diagnostics.py          # Tent diagnostics
+    ├── test_tent_entity.py               # Tent entity
+    ├── test_tent_integration.py          # Tent integration
+    ├── test_tent_plant_assignment.py     # Tent plant assignment
+    ├── test_tent_sensor_aggregation.py   # Tent sensor aggregation
+    └── test_tent_services.py             # Tent services
 ```
 
 ### Running Tests
@@ -39,6 +71,17 @@ python tests/run_tests.py
 ```
 
 This runner executes all tests in isolation and provides a summary of results.
+
+#### Running Tests in a Specific Category
+
+To run tests within a specific category (e.g., integration tests), you can use the following command:
+
+```bash
+cd homeassistant-brokkoli
+python -m pytest tests/integration -v
+```
+
+This will execute all tests located in the `tests/integration` directory.
 
 #### Individual Test Execution
 
@@ -62,7 +105,31 @@ Validates that all required constants are properly defined in [const.py](file://
 - Aggregation methods
 - Consumption-related constants
 
-#### 2. Sensor Value Processing Tests
+#### 2. Consumption Constants Tests
+File: [unit/test_consumption_constants.py](file:///d:/Python/2/homeassistant-brokkoli/tests/unit/test_consumption_constants.py)
+
+Validates consumption-related constants and configuration:
+- Consumption attributes, readings, icons, and units
+- Default values for water, fertilizer, and power consumption
+- Configuration constants for consumption sensors
+- Aggregation methods for different consumption sensor types
+- Total consumption constants and aggregation methods
+- Aggregation method constants (ORIGINAL, MEAN, MEDIAN, etc.)
+
+#### 3. Energy Cost Constants Tests
+File: [unit/test_energy_cost_constants.py](file:///d:/Python/2/homeassistant-brokkoli/tests/unit/test_energy_cost_constants.py)
+
+Validates energy cost constants and calculation logic:
+- Energy cost constants (reading name, icon, kWh price)
+- Energy cost configuration constants
+- Energy cost calculation logic with various scenarios
+- Rounding behavior for currency values
+- Edge cases (zero consumption, high consumption)
+- Custom price configurations
+- Negative consumption values (for energy returned to grid)
+- Decimal configuration for energy cost sensors
+
+#### 4. Sensor Value Processing Tests
 File: [test_sensor_value_processing.py](file:///d:/Python/2/homeassistant-brokkoli/tests/test_sensor_value_processing.py)
 
 Tests sensor value processing logic:
@@ -70,7 +137,7 @@ Tests sensor value processing logic:
 - Edge cases (negative values, decimals, scientific notation)
 - Invalid value handling
 
-#### 3. Consumption Tracking Tests
+#### 5. Consumption Tracking Tests
 File: [test_consumption_tracking.py](file:///d:/Python/2/homeassistant-brokkoli/tests/test_consumption_tracking.py)
 
 Validates consumption tracking functionality:
@@ -78,14 +145,14 @@ Validates consumption tracking functionality:
 - Default consumption values
 - Service parameter validation
 
-#### 4. Service Functionality Tests
+#### 6. Service Functionality Tests
 File: [test_service_functionality.py](file:///d:/Python/2/homeassistant-brokkoli/tests/test_service_functionality.py)
 
 Tests service functionality:
 - Service constants validation
 - Service schema existence
 
-#### 5. Plant Entity Tests
+#### 7. Plant Entity Tests
 File: [test_plant_entity.py](file:///d:/Python/2/homeassistant-brokkoli/tests/test_plant_entity.py)
 
 Tests plant entity functionality:
@@ -94,7 +161,7 @@ Tests plant entity functionality:
 - Growth phases
 - Configuration attributes
 
-#### 6. Integration Scenario Tests
+#### 8. Integration Scenario Tests
 File: [test_integration_scenarios.py](file:///d:/Python/2/homeassistant-brokkoli/tests/test_integration_scenarios.py)
 
 Tests integration scenarios:
@@ -105,7 +172,7 @@ Tests integration scenarios:
 - Data persistence integration
 - Consumption integration
 
-#### 7. Data Persistence Tests
+#### 9. Data Persistence Tests
 File: [test_data_persistence.py](file:///d:/Python/2/homeassistant-brokkoli/tests/test_data_persistence.py)
 
 Tests data persistence:

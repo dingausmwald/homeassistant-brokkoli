@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#4CAF50" rx="40"/>
+  <circle cx="256" cy="256" r="160" fill="#8BC34A"/>
+  <path d="M256 96 L256 416 M96 256 L416 256 M136 136 L376 376 M136 376 L376 136" stroke="#FFFFFF" stroke-width="32" stroke-linecap="round"/>
+  <text x="256" y="480" font-family="Arial, sans-serif" font-size="48" fill="#FFFFFF" text-anchor="middle">BROKKOLI</text>
+</svg>

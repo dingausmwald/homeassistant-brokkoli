@@ -7,6 +7,7 @@ import logging
 import re
 from typing import Any
 import urllib.parse
+from datetime import datetime
 
 # Third Party Imports
 import voluptuous as vol
@@ -27,6 +28,7 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import selector
 from homeassistant.helpers.network import NoURLAvailableError, get_url
 from homeassistant.helpers.selector import selector
 
@@ -51,6 +53,7 @@ from .const import (
     ATTR_OPTIONS,
     ATTR_SEARCH_FOR,
     ATTR_SELECT,
+    ATTR_PLANT,
     ATTR_SENSORS,
     ATTR_STRAIN,
     ATTR_BREEDER,
@@ -106,6 +109,7 @@ from .const import (
     FLOW_WATER_CONSUMPTION_TRIGGER,
     FLOW_FERTILIZER_CONSUMPTION_TRIGGER,
     FLOW_POWER_CONSUMPTION_TRIGGER,
+    FLOW_PH_TRIGGER,
     OPB_DISPLAY_PID,
     DEFAULT_GROWTH_PHASE,
     GROWTH_PHASES,
@@ -129,6 +133,7 @@ from .const import (
     DEVICE_TYPE_PLANT,
     DEVICE_TYPE_CYCLE,
     DEVICE_TYPE_CONFIG,
+    DEVICE_TYPE_TENT,
     DEVICE_TYPES,
     ATTR_DEVICE_TYPE,
     ATTR_MOISTURE,
@@ -169,6 +174,8 @@ from .const import (
 )
 from .plant_helpers import PlantHelper
 from .sensor_configuration import DEFAULT_DECIMALS
+from .tent import Tent
+# _get_next_id is imported from __init__.py
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -184,6 +191,41 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self.plant_info = {}
         self.error = None
 
+    async def async_step_import(self, import_config):
+        """Handle imported configuration (service or YAML initiated)."""
+        try:
+            # Expect { FLOW_PLANT_INFO: {...} }
+            if import_config and FLOW_PLANT_INFO in import_config:
+                plant_info = dict(import_config[FLOW_PLANT_INFO])
+            else:
+                plant_info = dict(import_config or {})
+
+            # Some callers pass raw plant_info; normalize
+            if FLOW_PLANT_INFO not in import_config:
+                import_config = {FLOW_PLANT_INFO: plant_info}
+
+            title = plant_info.get(ATTR_NAME, "Plant Device")
+            return self.async_create_entry(title=title, data=import_config)
+        except Exception as e:
+            _LOGGER.exception("Failed in async_step_import: %s", e)
+            return self.async_abort(reason="import_failed")
+
+    def _get_available_tents(self):
+        """Get a list of available tents for selection."""
+        tents = []
+        # Query the system for available tents
+        if self.hass and DOMAIN in self.hass.data:
+            for entry_id in self.hass.data[DOMAIN]:
+                if ATTR_PLANT in self.hass.data[DOMAIN][entry_id]:
+                    plant = self.hass.data[DOMAIN][entry_id][ATTR_PLANT]
+                    if hasattr(plant, 'device_type') and plant.device_type == DEVICE_TYPE_TENT:
+                        # Add tent to the list with name and ID
+                        tents.append({
+                            "value": plant.tent_id,
+                            "label": plant.name
+                        })
+        return tents
+
     @staticmethod
     @callback
     def async_get_options_flow(
@@ -191,15 +233,6 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> config_entries.OptionsFlow:
         """Create the options flow."""
         return OptionsFlowHandler(config_entry)
-
-    async def async_step_import(self, import_input):
-        """Importing config from configuration.yaml"""
-        _LOGGER.debug(import_input)
-        # return FlowResultType.ABORT
-        return self.async_create_entry(
-            title=import_input[FLOW_PLANT_INFO][ATTR_NAME],
-            data=import_input,
-        )
 
     async def async_step_user(self, user_input=None):
         """Handle a flow initialized by the user."""
@@ -341,6 +374,8 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input[ATTR_DEVICE_TYPE] == DEVICE_TYPE_CYCLE:
             return await self.async_step_cycle()
+        elif user_input[ATTR_DEVICE_TYPE] == DEVICE_TYPE_TENT:
+            return await self.async_step_tent()
         else:
             return await self.async_step_plant()
 
@@ -359,6 +394,31 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             config_data = config_entry.data[FLOW_PLANT_INFO]
         else:
             config_data = {}
+
+        # Build form schema
+        data_schema = {
+            vol.Required(ATTR_NAME): cv.string,
+            vol.Optional(
+                "plant_emoji",
+                default=config_data.get("default_cycle_icon", "🔄"),
+            ): cv.string,
+            vol.Optional(
+                "growth_phase_aggregation",
+                default=config_data.get("default_growth_phase_aggregation", "min"),
+            ): cv.string,
+            vol.Optional(
+                "flowering_duration_aggregation",
+                default=config_data.get("default_flowering_duration_aggregation", "mean"),
+            ): cv.string,
+            vol.Optional(
+                "pot_size_aggregation",
+                default=config_data.get("default_pot_size_aggregation", "mean"),
+            ): cv.string,
+            vol.Optional(
+                "water_capacity_aggregation",
+                default=config_data.get("default_water_capacity_aggregation", "mean"),
+            ): cv.string,
+        }
 
         if user_input is not None:
             self.plant_info = {
@@ -530,167 +590,33 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         # Wenn der Aufruf vom Service kommt, nutzen wir die vorgegebenen Daten
         if self.context.get("source_type") == "service":
             return self.async_create_entry(
-                title=user_input[ATTR_NAME],
-                data={
-                    FLOW_PLANT_INFO: {
-                        ATTR_NAME: user_input[ATTR_NAME],
-                        ATTR_DEVICE_TYPE: DEVICE_TYPE_CYCLE,
-                        ATTR_IS_NEW_PLANT: True,
-                        ATTR_STRAIN: "",
-                        ATTR_BREEDER: "",
-                        "growth_phase": DEFAULT_GROWTH_PHASE,
-                        "plant_emoji": user_input.get("plant_emoji", ""),
-                    }
-                },
+                title=self.plant_info[ATTR_NAME],
+                data={FLOW_PLANT_INFO: self.plant_info},
             )
 
-        data_schema = {
-            vol.Required(ATTR_NAME): cv.string,
-            vol.Optional(
-                "plant_emoji", default=config_data.get("default_cycle_icon", "")
-            ): cv.string,
-            vol.Optional(
-                "growth_phase_aggregation",
-                default=config_data.get("default_growth_phase_aggregation", "min"),
-            ): vol.In(["min", "max"]),
-            vol.Optional(
-                "flowering_duration_aggregation",
-                default=config_data.get(
-                    "default_flowering_duration_aggregation", "mean"
-                ),
-            ): vol.In(AGGREGATION_METHODS),
-            vol.Optional(
-                "pot_size_aggregation",
-                default=config_data.get("default_pot_size_aggregation", "mean"),
-            ): vol.In(AGGREGATION_METHODS),
-            vol.Optional(
-                "water_capacity_aggregation",
-                default=config_data.get("default_water_capacity_aggregation", "mean"),
-            ): vol.In(AGGREGATION_METHODS),
-            vol.Optional(
-                "temperature_aggregation",
-                default=config_data.get(
-                    "default_temperature_aggregation",
-                    DEFAULT_AGGREGATIONS["temperature"],
-                ),
-            ): vol.In(AGGREGATION_METHODS),
-            vol.Optional(
-                "moisture_aggregation",
-                default=config_data.get(
-                    "default_moisture_aggregation", DEFAULT_AGGREGATIONS["moisture"]
-                ),
-            ): vol.In(AGGREGATION_METHODS),
-            vol.Optional(
-                "conductivity_aggregation",
-                default=config_data.get(
-                    "default_conductivity_aggregation",
-                    DEFAULT_AGGREGATIONS["conductivity"],
-                ),
-            ): vol.In(AGGREGATION_METHODS),
-            vol.Optional(
-                "illuminance_aggregation",
-                default=config_data.get(
-                    "default_illuminance_aggregation",
-                    DEFAULT_AGGREGATIONS["illuminance"],
-                ),
-            ): vol.In(AGGREGATION_METHODS),
-            vol.Optional(
-                "humidity_aggregation",
-                default=config_data.get(
-                    "default_humidity_aggregation", DEFAULT_AGGREGATIONS["humidity"]
-                ),
-            ): vol.In(AGGREGATION_METHODS),
-            vol.Optional(
-                "CO2_aggregation",
-                default=config_data.get(
-                    "default_CO2_aggregation", DEFAULT_AGGREGATIONS["CO2"]
-                ),
-            ): vol.In(AGGREGATION_METHODS),
-            # Erweiterte Aggregationsmethoden für DLI/PPFD
-            vol.Optional(
-                "ppfd_aggregation",
-                default=config_data.get(
-                    "default_ppfd_aggregation", DEFAULT_AGGREGATIONS["ppfd"]
-                ),
-            ): vol.In(AGGREGATION_METHODS_EXTENDED),
-            vol.Optional(
-                "dli_aggregation",
-                default=config_data.get(
-                    "default_dli_aggregation", DEFAULT_AGGREGATIONS["dli"]
-                ),
-            ): vol.In(AGGREGATION_METHODS_EXTENDED),
-            vol.Optional(
-                "total_integral_aggregation",
-                default=config_data.get(
-                    "default_total_integral_aggregation",
-                    DEFAULT_AGGREGATIONS["total_integral"],
-                ),
-            ): vol.In(AGGREGATION_METHODS_EXTENDED),
-            # Neue Aggregationen für die Diagnosesensoren
-            vol.Optional(
-                "moisture_consumption_aggregation",
-                default=config_data.get(
-                    "default_moisture_consumption_aggregation",
-                    DEFAULT_AGGREGATIONS["moisture_consumption"],
-                ),
-            ): vol.In(AGGREGATION_METHODS_EXTENDED),
-            vol.Optional(
-                "fertilizer_consumption_aggregation",
-                default=config_data.get(
-                    "default_fertilizer_consumption_aggregation",
-                    DEFAULT_AGGREGATIONS["fertilizer_consumption"],
-                ),
-            ): vol.In(AGGREGATION_METHODS_EXTENDED),
-            vol.Optional(
-                "total_water_consumption_aggregation",
-                default=config_data.get(
-                    "default_total_water_consumption_aggregation",
-                    DEFAULT_AGGREGATIONS["total_water_consumption"],
-                ),
-            ): vol.In(AGGREGATION_METHODS_EXTENDED),
-            vol.Optional(
-                "total_fertilizer_consumption_aggregation",
-                default=config_data.get(
-                    "default_total_fertilizer_consumption_aggregation",
-                    DEFAULT_AGGREGATIONS["total_fertilizer_consumption"],
-                ),
-            ): vol.In(AGGREGATION_METHODS_EXTENDED),
-            vol.Optional(
-                "power_consumption_aggregation",
-                default=config_data.get(
-                    "default_power_consumption_aggregation",
-                    DEFAULT_AGGREGATIONS["power_consumption"],
-                ),
-            ): vol.In(AGGREGATION_METHODS),
-            vol.Optional(
-                "total_power_consumption_aggregation",
-                default=config_data.get(
-                    "default_total_power_consumption_aggregation",
-                    DEFAULT_AGGREGATIONS["total_power_consumption"],
-                ),
-            ): vol.In(AGGREGATION_METHODS_EXTENDED),
-            vol.Optional(
-                "health_aggregation",
-                default=config_data.get(
-                    "default_health_aggregation", DEFAULT_AGGREGATIONS["health"]
-                ),
-            ): vol.In(AGGREGATION_METHODS),
-            vol.Optional(
-                "ph_aggregation",
-                default=config_data.get(
-                    "default_ph_aggregation", DEFAULT_AGGREGATIONS["ph"]
-                ),
-            ): vol.In(AGGREGATION_METHODS),
-        }
-
+        # Otherwise, show the cycle form
         return self.async_show_form(
             step_id="cycle",
             data_schema=vol.Schema(data_schema),
             errors=errors,
         )
 
-    async def async_step_plant(self, user_input=None):
-        """Handle plant configuration."""
+    async def _get_sensor_entities(self):
+        """Get available sensor entities for selection."""
+        # Get all entities from the entity registry
+        from homeassistant.helpers.entity_registry import async_get
+        entity_registry = async_get(self.hass)
+        
+        # Filter for sensor entities
+        sensor_entities = []
+        for entity in entity_registry.entities.values():
+            if entity.domain == "sensor":
+                sensor_entities.append(entity.entity_id)
+        
+        return sorted(sensor_entities)
+
+    async def async_step_tent(self, user_input=None):
+        """Handle tent configuration."""
         errors = {}
 
         # Hole die Default-Werte aus dem Konfigurationsknoten
@@ -705,107 +631,374 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         else:
             config_data = {}
 
-        if user_input is not None:
-            self.plant_info = {
-                ATTR_NAME: user_input[ATTR_NAME],
-                ATTR_DEVICE_TYPE: DEVICE_TYPE_PLANT,
-                ATTR_IS_NEW_PLANT: True,
-                ATTR_STRAIN: user_input[ATTR_STRAIN],
-                ATTR_BREEDER: user_input.get(ATTR_BREEDER, ""),
-                "growth_phase": user_input.get("growth_phase", DEFAULT_GROWTH_PHASE),
-                "plant_emoji": user_input.get("plant_emoji", "🌱"),
-                ATTR_POT_SIZE: user_input.get(ATTR_POT_SIZE, DEFAULT_POT_SIZE),
-                ATTR_WATER_CAPACITY: user_input.get(
-                    ATTR_WATER_CAPACITY, DEFAULT_WATER_CAPACITY
-                ),
-                ATTR_NORMALIZE_MOISTURE: user_input.get(ATTR_NORMALIZE_MOISTURE, False),
-                ATTR_NORMALIZE_WINDOW: user_input.get(
-                    ATTR_NORMALIZE_WINDOW, DEFAULT_NORMALIZE_WINDOW
-                ),
-                ATTR_NORMALIZE_PERCENTILE: user_input.get(
-                    ATTR_NORMALIZE_PERCENTILE, DEFAULT_NORMALIZE_PERCENTILE
-                ),
-                # Füge die Sensorzuweisungen hinzu
-                FLOW_SENSOR_TEMPERATURE: user_input.get(FLOW_SENSOR_TEMPERATURE),
-                FLOW_SENSOR_MOISTURE: user_input.get(FLOW_SENSOR_MOISTURE),
-                FLOW_SENSOR_CONDUCTIVITY: user_input.get(FLOW_SENSOR_CONDUCTIVITY),
-                FLOW_SENSOR_ILLUMINANCE: user_input.get(FLOW_SENSOR_ILLUMINANCE),
-                FLOW_SENSOR_HUMIDITY: user_input.get(FLOW_SENSOR_HUMIDITY),
-                FLOW_SENSOR_CO2: user_input.get(FLOW_SENSOR_CO2),
-                FLOW_SENSOR_POWER_CONSUMPTION: user_input.get(
-                    FLOW_SENSOR_POWER_CONSUMPTION
-                ),
-                FLOW_SENSOR_PH: user_input.get(FLOW_SENSOR_PH),
-            }
-
-            plant_helper = PlantHelper(hass=self.hass)
-            plant_config = await plant_helper.get_plantbook_data(
-                {
-                    ATTR_STRAIN: self.plant_info[ATTR_STRAIN],
-                    ATTR_BREEDER: self.plant_info[ATTR_BREEDER],
-                }
-            )
-
-            if (
-                plant_config
-                and plant_config.get(FLOW_PLANT_INFO, {}).get(DATA_SOURCE)
-                == DATA_SOURCE_PLANTBOOK
-            ):
-                plant_info = plant_config[FLOW_PLANT_INFO]
-                # Füge den Namen mit Emoji hinzu
-                plant_emoji = self.plant_info.get("plant_emoji", "")
-                plant_info[ATTR_NAME] = self.plant_info[ATTR_NAME] + (
-                    f" {plant_emoji}" if plant_emoji else ""
-                )
-                plant_info["plant_emoji"] = plant_emoji
-                self.plant_info.update(plant_info)
-            else:
-                # Wenn keine OpenPlantbook-Daten verfügbar sind, füge trotzdem das Emoji zum Namen hinzu
-                plant_emoji = self.plant_info.get("plant_emoji", "")
-                self.plant_info[ATTR_NAME] = self.plant_info[ATTR_NAME] + (
-                    f" {plant_emoji}" if plant_emoji else ""
-                )
-
-            # Wenn der Aufruf vom Service kommt, erstelle direkt den Entry
-            if self.context.get("source_type") == "service":
-                # Nutze PlantHelper für die Standard-Grenzwerte
-                plant_helper = PlantHelper(hass=self.hass)
-                plant_config = await plant_helper.generate_configentry(
-                    config={
-                        ATTR_NAME: self.plant_info[ATTR_NAME],
-                        ATTR_STRAIN: self.plant_info[ATTR_STRAIN],
-                        ATTR_BREEDER: self.plant_info.get(ATTR_BREEDER, ""),
-                        ATTR_SENSORS: {},
-                        "plant_emoji": self.plant_info.get("plant_emoji", ""),
-                    }
-                )
-
-                # Übernehme die Standard-Grenzwerte
-                self.plant_info.update(plant_config[FLOW_PLANT_INFO])
-
-                return self.async_create_entry(
-                    title=self.plant_info[ATTR_NAME],
-                    data={FLOW_PLANT_INFO: self.plant_info},
-                )
-
-            return await self.async_step_limits()
-
+        # Build form schema
         data_schema = {
             # Basis-Informationen
             vol.Required(ATTR_NAME): cv.string,
             vol.Optional(
-                "plant_emoji", default=config_data.get("default_icon")
+                "plant_emoji", default="⛺"
+            ): cv.string,
+            # Typed sensor selectors
+            vol.Optional(FLOW_SENSOR_ILLUMINANCE): selector(
+                {
+                    ATTR_ENTITY: {
+                        ATTR_DEVICE_CLASS: SensorDeviceClass.ILLUMINANCE,
+                        ATTR_DOMAIN: DOMAIN_SENSOR,
+                    }
+                }
+            ),
+            vol.Optional(FLOW_SENSOR_HUMIDITY): selector(
+                {
+                    ATTR_ENTITY: {
+                        ATTR_DEVICE_CLASS: SensorDeviceClass.HUMIDITY,
+                        ATTR_DOMAIN: DOMAIN_SENSOR,
+                    }
+                }
+            ),
+            vol.Optional(FLOW_SENSOR_CO2): selector(
+                {
+                    ATTR_ENTITY: {
+                        ATTR_DEVICE_CLASS: SensorDeviceClass.CO2,
+                        ATTR_DOMAIN: DOMAIN_SENSOR,
+                    }
+                }
+            ),
+            vol.Optional(FLOW_SENSOR_POWER_CONSUMPTION): selector(
+                {
+                    ATTR_ENTITY: {
+                        ATTR_DEVICE_CLASS: SensorDeviceClass.POWER,
+                        ATTR_DOMAIN: DOMAIN_SENSOR,
+                    }
+                }
+            ),
+            vol.Optional(FLOW_SENSOR_PH): selector(
+                {
+                    ATTR_ENTITY: {
+                        ATTR_DEVICE_CLASS: SensorDeviceClass.PH,
+                        ATTR_DOMAIN: DOMAIN_SENSOR,
+                    }
+                }
+            ),
+        }
+
+        if user_input is not None:
+            try:
+                # Basic validation
+                if not user_input.get(ATTR_NAME):
+                    errors[ATTR_NAME] = "required"
+                    return self.async_show_form(
+                        step_id="tent",
+                        data_schema=vol.Schema(data_schema),
+                        errors=errors,
+                        description_placeholders={
+                            "sensors_hint": "Select sensors that match your plant monitoring needs. "
+                                            "This will make it easier to assign plants to this tent later."
+                        }
+                    )
+
+                # Generate a unique ID for the tent
+                from .__init__ import _get_next_id
+                tent_id = await _get_next_id(self.hass, DEVICE_TYPE_TENT)
+                _LOGGER.debug("Generated tent_id: %s", tent_id)
+                
+                self.plant_info = {
+                    ATTR_NAME: user_input[ATTR_NAME],
+                    "name": user_input[ATTR_NAME],
+                    ATTR_DEVICE_TYPE: DEVICE_TYPE_TENT,
+                    ATTR_IS_NEW_PLANT: True,
+                    "plant_emoji": user_input.get("plant_emoji", "⛺"),
+                    "tent_id": tent_id,
+                    "journal": {},
+                    "maintenance_entries": [],
+                    "created_at": datetime.now().isoformat(),
+                    "updated_at": datetime.now().isoformat(),
+                    "device_id": None,  # Will be set by the system
+                }
+
+                # Persist typed sensor fields
+                for key in (
+                    FLOW_SENSOR_ILLUMINANCE,
+                    FLOW_SENSOR_HUMIDITY,
+                    FLOW_SENSOR_MOISTURE,
+                    FLOW_SENSOR_CO2,
+                    FLOW_SENSOR_POWER_CONSUMPTION,
+                    FLOW_SENSOR_PH,
+                ):
+                    if user_input.get(key):
+                        self.plant_info[key] = user_input[key]
+
+                # Create entry directly
+                _LOGGER.debug("Creating tent entry with plant_info: %s", self.plant_info)
+                return self.async_create_entry(
+                    title=self.plant_info[ATTR_NAME],
+                    data={FLOW_PLANT_INFO: self.plant_info},
+                )
+            except Exception as e:
+                _LOGGER.error("Failed to create tent entry: %s", e, exc_info=True)
+                _LOGGER.error("Tent info: %s", self.plant_info)
+                errors["base"] = "unknown"
+                # Show form with errors
+                return self.async_show_form(
+                    step_id="tent",
+                    data_schema=vol.Schema(data_schema),
+                    errors=errors,
+                    description_placeholders={
+                        "sensors_hint": "Select sensors that match your plant monitoring needs. "
+                                        "This will make it easier to assign plants to this tent later."
+                    }
+                )
+
+        return self.async_show_form(
+            step_id="tent",
+            data_schema=vol.Schema(data_schema),
+            errors=errors,
+            description_placeholders={
+                "sensors_hint": "Select sensors that match your plant monitoring needs. "
+                                "This will make it easier to assign plants to this tent later."
+            }
+        )
+
+    async def async_step_plant(self, user_input=None):
+        """Handle plant configuration."""
+        errors = {}
+
+        # Load default configuration data
+        config_entry = None
+        for entry in self._async_current_entries():
+            if entry.data.get("is_config", False):
+                config_entry = entry
+                break
+
+        config_data = config_entry.data.get(FLOW_PLANT_INFO, {}) if config_entry else {}
+
+        if user_input is not None:
+            # Generate a unique ID for the plant
+            from .__init__ import _get_next_id
+            plant_id = await _get_next_id(self.hass, DEVICE_TYPE_PLANT)
+
+            # Check if a plant with the same name already exists
+            for entry in self._async_current_entries():
+                if entry.data.get("plant_info", {}).get(ATTR_NAME) == user_input[ATTR_NAME]:
+                    errors[ATTR_NAME] = "name_exists"
+                    data_schema = {
+                        # Basis-Informationen
+                        vol.Required(ATTR_NAME): cv.string,
+                        vol.Optional(
+                            "plant_emoji", default=config_data.get("default_icon", "🌱")
+                        ): cv.string,
+                        vol.Required(ATTR_STRAIN): cv.string,
+                        vol.Required(ATTR_BREEDER): cv.string,
+                        vol.Optional(
+                            "growth_phase", default=config_data.get("default_growth_phase", DEFAULT_GROWTH_PHASE)
+                        ): vol.In(GROWTH_PHASES),
+                        vol.Optional(
+                            ATTR_POT_SIZE, default=config_data.get("default_pot_size", DEFAULT_POT_SIZE)
+                        ): vol.Coerce(float),
+                        vol.Optional(
+                            ATTR_WATER_CAPACITY, default=config_data.get("default_water_capacity", DEFAULT_WATER_CAPACITY)
+                        ): vol.Coerce(int),
+                        # Sensor Selektoren
+                        vol.Optional(FLOW_SENSOR_TEMPERATURE): selector(
+                            {
+                                ATTR_ENTITY: {
+                                    ATTR_DEVICE_CLASS: SensorDeviceClass.TEMPERATURE,
+                                    ATTR_DOMAIN: DOMAIN_SENSOR,
+                                }
+                            }
+                        ),
+                        vol.Optional(FLOW_SENSOR_MOISTURE): selector(
+                            {
+                                ATTR_ENTITY: {
+                                    ATTR_DEVICE_CLASS: SensorDeviceClass.MOISTURE,
+                                    ATTR_DOMAIN: DOMAIN_SENSOR,
+                                }
+                            }
+                        ),
+                        vol.Optional(FLOW_SENSOR_CONDUCTIVITY): selector(
+                            {
+                                ATTR_ENTITY: {
+                                    ATTR_DEVICE_CLASS: SensorDeviceClass.CONDUCTIVITY,
+                                    ATTR_DOMAIN: DOMAIN_SENSOR,
+                                }
+                            }
+                        ),
+                        vol.Optional(
+                            ATTR_NORMALIZE_MOISTURE,
+                            default=config_data.get("default_normalize_moisture", False),
+                        ): cv.boolean,
+                        vol.Optional(
+                            ATTR_NORMALIZE_WINDOW,
+                            default=config_data.get("default_normalize_window", DEFAULT_NORMALIZE_WINDOW),
+                        ): cv.positive_int,
+                        vol.Optional(
+                            ATTR_NORMALIZE_PERCENTILE,
+                            default=config_data.get("default_normalize_percentile", DEFAULT_NORMALIZE_PERCENTILE),
+                        ): cv.positive_int,
+                        # Tent selection
+                        vol.Optional("assigned_tent"): selector({
+                            "select": {
+                                "options": self._get_available_tents()
+                            }
+                        }),
+                    }
+                    return self.async_show_form(
+                        step_id="plant",
+                        data_schema=vol.Schema(data_schema),
+                        errors=errors,
+                    )
+
+            self.plant_info = {
+                ATTR_NAME: user_input[ATTR_NAME],
+                ATTR_STRAIN: user_input.get(ATTR_STRAIN, ""),
+                ATTR_BREEDER: user_input.get(ATTR_BREEDER, ""),
+                ATTR_DEVICE_TYPE: DEVICE_TYPE_PLANT,
+                ATTR_IS_NEW_PLANT: True,
+                "plant_emoji": user_input.get("plant_emoji", "🌱"),
+                "plant_id": plant_id,
+                "sensors": user_input.get("sensors", []),
+                "journal": {},
+                "maintenance_entries": [],
+                "created_at": datetime.now().isoformat(),
+                "updated_at": datetime.now().isoformat(),
+                "aggregations": {
+                    "temperature": user_input.get(
+                        "temperature_aggregation",
+                        config_data.get(
+                            "default_temperature_aggregation",
+                            DEFAULT_AGGREGATIONS["temperature"],
+                        ),
+                    ),
+                    "humidity": user_input.get(
+                        "humidity_aggregation",
+                        config_data.get(
+                            "default_humidity_aggregation",
+                            DEFAULT_AGGREGATIONS["humidity"],
+                        ),
+                    ),
+                    "co2": user_input.get(
+                        "co2_aggregation",
+                        config_data.get(
+                            "default_co2_aggregation",
+                            DEFAULT_AGGREGATIONS["CO2"],
+                        ),
+                    ),
+                    "water_consumption": user_input.get(
+                        "water_consumption_aggregation",
+                        config_data.get(
+                            "default_water_consumption_aggregation",
+                            DEFAULT_AGGREGATIONS["moisture_consumption"],
+                        ),
+                    ),
+                    "total_integral": user_input.get(
+                        "total_integral_aggregation",
+                        config_data.get(
+                            "default_total_integral_aggregation",
+                            DEFAULT_AGGREGATIONS["total_integral"],
+                        ),
+                    ),
+                    "moisture_consumption": user_input.get(
+                        "moisture_consumption_aggregation",
+                        config_data.get(
+                            "default_moisture_consumption_aggregation",
+                            DEFAULT_AGGREGATIONS["moisture_consumption"],
+                        ),
+                    ),
+                    "fertilizer_consumption": user_input.get(
+                        "fertilizer_consumption_aggregation",
+                        config_data.get(
+                            "default_fertilizer_consumption_aggregation",
+                            DEFAULT_AGGREGATIONS["fertilizer_consumption"],
+                        ),
+                    ),
+                    "total_water_consumption": user_input.get(
+                        "total_water_consumption_aggregation",
+                        config_data.get(
+                            "default_total_water_consumption_aggregation",
+                            DEFAULT_AGGREGATIONS["total_water_consumption"],
+                        ),
+                    ),
+                    "total_fertilizer_consumption": user_input.get(
+                        "total_fertilizer_consumption_aggregation",
+                        config_data.get(
+                            "default_total_fertilizer_consumption_aggregation",
+                            DEFAULT_AGGREGATIONS["total_fertilizer_consumption"],
+                        ),
+                    ),
+                    "power_consumption": user_input.get(
+                        "power_consumption_aggregation",
+                        config_data.get(
+                            "default_power_consumption_aggregation",
+                            DEFAULT_AGGREGATIONS["power_consumption"],
+                        ),
+                    ),
+                    "total_power_consumption": user_input.get(
+                        "total_power_consumption_aggregation",
+                        config_data.get(
+                            "default_total_power_consumption_aggregation",
+                            DEFAULT_AGGREGATIONS["total_power_consumption"],
+                        ),
+                    ),
+                    "health": user_input.get(
+                        "health_aggregation",
+                        config_data.get(
+                            "default_health_aggregation", DEFAULT_AGGREGATIONS["health"]
+                        ),
+                    ),
+                    "ph": user_input.get(
+                        "ph_aggregation",
+                        config_data.get(
+                            "default_ph_aggregation", DEFAULT_AGGREGATIONS["ph"]
+                        ),
+                    ),
+                },
+            }
+
+            # Nutze PlantHelper für die Standard-Grenzwerte
+            plant_helper = PlantHelper(hass=self.hass)
+            plant_config = await plant_helper.generate_configentry(
+                config={
+                    ATTR_NAME: self.plant_info[ATTR_NAME],
+                    ATTR_STRAIN: "",
+                    ATTR_BREEDER: "",
+                    ATTR_SENSORS: {},
+                    "plant_emoji": self.plant_info.get("plant_emoji", ""),
+                    ATTR_DEVICE_TYPE: DEVICE_TYPE_CYCLE,
+                }
+            )
+
+            # Übernehme die Standard-Grenzwerte
+            self.plant_info.update(plant_config[FLOW_PLANT_INFO])
+
+            # Erstelle direkt den Entry ohne weitere Schritte
+            return self.async_create_entry(
+                title=self.plant_info[ATTR_NAME],
+                data={FLOW_PLANT_INFO: self.plant_info},
+            )
+
+        # Wenn der Aufruf vom Service kommt, nutzen wir die vorgegebenen Daten
+        if self.context.get("source_type") == "service":
+            return self.async_create_entry(
+                title=self.plant_info[ATTR_NAME],
+                data={FLOW_PLANT_INFO: self.plant_info},
+            )
+
+        # Build form schema
+        data_schema = {
+            # Basis-Informationen
+            vol.Required(ATTR_NAME): cv.string,
+            vol.Optional(
+                "plant_emoji", default=config_data.get("default_icon", "🌱")
             ): cv.string,
             vol.Required(ATTR_STRAIN): cv.string,
             vol.Required(ATTR_BREEDER): cv.string,
             vol.Optional(
-                "growth_phase", default=config_data.get("default_growth_phase")
+                "growth_phase", default=config_data.get("default_growth_phase", DEFAULT_GROWTH_PHASE)
             ): vol.In(GROWTH_PHASES),
             vol.Optional(
-                ATTR_POT_SIZE, default=config_data.get("default_pot_size")
+                ATTR_POT_SIZE, default=config_data.get("default_pot_size", DEFAULT_POT_SIZE)
             ): vol.Coerce(float),
             vol.Optional(
-                ATTR_WATER_CAPACITY, default=config_data.get("default_water_capacity")
+                ATTR_WATER_CAPACITY, default=config_data.get("default_water_capacity", DEFAULT_WATER_CAPACITY)
             ): vol.Coerce(int),
             # Sensor Selektoren
             vol.Optional(FLOW_SENSOR_TEMPERATURE): selector(
@@ -832,6 +1025,7 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     }
                 }
             ),
+            # Typed sensor selectors
             vol.Optional(FLOW_SENSOR_ILLUMINANCE): selector(
                 {
                     ATTR_ENTITY: {
@@ -879,170 +1073,89 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ),
             vol.Optional(
                 ATTR_NORMALIZE_MOISTURE,
-                default=config_data.get("default_normalize_moisture"),
+                default=config_data.get("default_normalize_moisture", False),
             ): cv.boolean,
             vol.Optional(
                 ATTR_NORMALIZE_WINDOW,
-                default=config_data.get("default_normalize_window"),
+                default=config_data.get("default_normalize_window", DEFAULT_NORMALIZE_WINDOW),
             ): cv.positive_int,
             vol.Optional(
                 ATTR_NORMALIZE_PERCENTILE,
-                default=config_data.get("default_normalize_percentile"),
+                default=config_data.get("default_normalize_percentile", DEFAULT_NORMALIZE_PERCENTILE),
             ): cv.positive_int,
+            # Tent selection
+            vol.Optional("assigned_tent"): selector({
+                "select": {
+                    "options": self._get_available_tents()
+                }
+            }),
         }
 
         return self.async_show_form(
             step_id="plant",
             data_schema=vol.Schema(data_schema),
             errors=errors,
-            description_placeholders={"opb_search": self.plant_info.get(ATTR_STRAIN)},
+            description_placeholders={"opb_search": self.plant_info.get(ATTR_STRAIN) if hasattr(self, 'plant_info') else ""},
         )
 
-    async def async_step_limits(self, user_input=None):
-        """Handle limits step."""
-        # Get default values from OpenPlantbook
-        plant_helper = PlantHelper(hass=self.hass)
-        plant_config = await plant_helper.generate_configentry(
-            config={
-                ATTR_NAME: self.plant_info[ATTR_NAME],
-                ATTR_STRAIN: self.plant_info[ATTR_STRAIN],
-                ATTR_BREEDER: self.plant_info.get(ATTR_BREEDER, ""),
-                ATTR_SENSORS: {},
-                "plant_emoji": self.plant_info.get("plant_emoji", ""),
-            }
-        )
+    async def _get_sensor_entities(self):
+        """Get available sensor entities for selection."""
+        # Get all entities from the entity registry
+        from homeassistant.helpers.entity_registry import async_get
+        entity_registry = async_get(self.hass)
+        
+        # Filter for sensor entities
+        sensor_entities = []
+        for entity in entity_registry.entities.values():
+            if entity.domain == "sensor":
+                sensor_entities.append(entity.entity_id)
+        
+        return sorted(sensor_entities)
 
-        # Hole die Default-Werte aus dem Konfigurationsknoten
-        config_entry = None
-        for entry in self._async_current_entries():
-            if entry.data.get("is_config", False):
-                config_entry = entry
-                break
+    def _find_tent_by_id(self, tent_id):
+        """Find a tent entity by its ID."""
+        if self.hass and DOMAIN in self.hass.data:
+            for entry_id in self.hass.data[DOMAIN]:
+                if ATTR_PLANT in self.hass.data[DOMAIN][entry_id]:
+                    plant = self.hass.data[DOMAIN][entry_id][ATTR_PLANT]
+                    if (hasattr(plant, 'device_type') and plant.device_type == DEVICE_TYPE_TENT and 
+                        hasattr(plant, 'tent_id') and plant.tent_id == tent_id):
+                        return plant
+        return None
 
-        if config_entry:
-            config_data = config_entry.data[FLOW_PLANT_INFO]
-        else:
-            # Fallback auf Standard-Werte wenn kein Konfigurationsknoten existiert
-            config_data = {
-                CONF_DEFAULT_MAX_MOISTURE: 60,
-                CONF_DEFAULT_MIN_MOISTURE: 20,
-                CONF_DEFAULT_MAX_ILLUMINANCE: 30000,
-                CONF_DEFAULT_MIN_ILLUMINANCE: 1500,
-                CONF_DEFAULT_MAX_DLI: 30,
-                CONF_DEFAULT_MIN_DLI: 8,
-                CONF_DEFAULT_MAX_TEMPERATURE: 30,
-                CONF_DEFAULT_MIN_TEMPERATURE: 10,
-                CONF_DEFAULT_MAX_CONDUCTIVITY: 2000,
-                CONF_DEFAULT_MIN_CONDUCTIVITY: 500,
-                CONF_DEFAULT_MAX_HUMIDITY: 60,
-                CONF_DEFAULT_MAX_CO2: 4000,
-                CONF_DEFAULT_MIN_HUMIDITY: 20,
-                CONF_DEFAULT_MIN_CO2: 300,
-                CONF_DEFAULT_MAX_WATER_CONSUMPTION: 2.0,
-                CONF_DEFAULT_MIN_WATER_CONSUMPTION: 0.1,
-                CONF_DEFAULT_MAX_FERTILIZER_CONSUMPTION: 2000,
-                CONF_DEFAULT_MIN_FERTILIZER_CONSUMPTION: 500,
-                CONF_DEFAULT_MAX_POWER_CONSUMPTION: 10.0,
-                CONF_DEFAULT_MIN_POWER_CONSUMPTION: 0.0,
-            }
-
-        if user_input is not None:
-            _LOGGER.debug("User Input %s", user_input)
-            # Validate user input
-            valid = await self.validate_step_3(user_input)
-            if valid:
-                if FLOW_RIGHT_PLANT in user_input and not user_input[FLOW_RIGHT_PLANT]:
-                    # User says this is not the right plant
-                    # Reset the search and go back to step 1
-                    self.plant_info[ATTR_SEARCH_FOR] = ""
-                    return await self.async_step_user()
-
-                # Store info to use in next step
-                self.plant_info[ATTR_LIMITS] = {}
-                for key in user_input:
-                    if key in [
-                        CONF_MAX_MOISTURE,
-                        CONF_MIN_MOISTURE,
-                        CONF_MAX_ILLUMINANCE,
-                        CONF_MIN_ILLUMINANCE,
-                        CONF_MAX_DLI,
-                        CONF_MIN_DLI,
-                        CONF_MAX_TEMPERATURE,
-                        CONF_MIN_TEMPERATURE,
-                        CONF_MAX_CONDUCTIVITY,
-                        CONF_MIN_CONDUCTIVITY,
-                        CONF_MAX_HUMIDITY,
-                        CONF_MAX_CO2,
-                        CONF_MIN_HUMIDITY,
-                        CONF_MIN_CO2,
-                        CONF_MAX_WATER_CONSUMPTION,
-                        CONF_MIN_WATER_CONSUMPTION,
-                        CONF_MAX_FERTILIZER_CONSUMPTION,
-                        CONF_MIN_FERTILIZER_CONSUMPTION,
-                        CONF_MAX_POWER_CONSUMPTION,
-                        CONF_MIN_POWER_CONSUMPTION,
-                        CONF_MAX_PH,
-                        CONF_MIN_PH,
-                    ]:
-                        self.plant_info[ATTR_LIMITS][key] = user_input[key]
-
-                if OPB_DISPLAY_PID in user_input:
-                    self.plant_info[OPB_DISPLAY_PID] = user_input[OPB_DISPLAY_PID]
-                if (
-                    ATTR_ENTITY_PICTURE not in user_input
-                    or not user_input[ATTR_ENTITY_PICTURE]
-                ):
-                    # Wenn kein Bild im user_input ist, nehmen wir das aus OpenPlantbook
-                    self.plant_info[ATTR_ENTITY_PICTURE] = plant_config[
-                        FLOW_PLANT_INFO
-                    ].get(ATTR_ENTITY_PICTURE, "")
-                else:
-                    # Sonst nehmen wir das vom User eingegebene Bild
-                    self.plant_info[ATTR_ENTITY_PICTURE] = user_input[
-                        ATTR_ENTITY_PICTURE
-                    ]
-                if ATTR_FLOWERING_DURATION in user_input:
-                    try:
-                        duration = int(user_input[ATTR_FLOWERING_DURATION])
-                        self.plant_info[ATTR_FLOWERING_DURATION] = duration
-                        # Setze auch original_flowering_duration wenn der User den Wert manuell ändert
-                        self.plant_info[ATTR_ORIGINAL_FLOWERING_DURATION] = duration
-                    except (ValueError, TypeError):
-                        self.plant_info[ATTR_FLOWERING_DURATION] = 0
-                        self.plant_info[ATTR_ORIGINAL_FLOWERING_DURATION] = 0
-
-                # Speichere alle zusätzlichen Attribute
-                for attr in [
-                    "pid",
-                    "type",
-                    "feminized",
-                    "timestamp",
-                    "website",
-                    "infotext1",
-                    "infotext2",
-                    "effects",
-                    "smell",
-                    "taste",
-                    "lineage",
-                    ATTR_PHENOTYPE,
-                    ATTR_HUNGER,
-                    ATTR_GROWTH_STRETCH,
-                    ATTR_FLOWER_STRETCH,
-                    ATTR_MOLD_RESISTANCE,
-                    ATTR_DIFFICULTY,
-                    ATTR_YIELD,
-                    ATTR_NOTES,
-                ]:
-                    # Für pid und timestamp nehmen wir die Werte aus plant_config wenn sie nicht im user_input sind
-                    if attr in ["pid", "timestamp"]:
-                        self.plant_info[attr] = str(
-                            plant_config[FLOW_PLANT_INFO].get(attr, "")
-                        )
-                    elif attr in user_input:
-                        self.plant_info[attr] = str(user_input[attr])
-
-                _LOGGER.debug("Plant info after saving: %s", self.plant_info)
-                return await self.async_step_limits_done()
+    def _map_tent_sensors_to_plant(self, tent_sensors):
+        """Map tent sensors to plant sensor attributes based on device class."""
+        if not tent_sensors:
+            return
+            
+        # Map sensor types to plant sensor attributes
+        sensor_mapping = {
+            SensorDeviceClass.TEMPERATURE: FLOW_SENSOR_TEMPERATURE,
+            SensorDeviceClass.HUMIDITY: FLOW_SENSOR_HUMIDITY,
+            SensorDeviceClass.ILLUMINANCE: FLOW_SENSOR_ILLUMINANCE,
+            SensorDeviceClass.CONDUCTIVITY: FLOW_SENSOR_CONDUCTIVITY,
+            SensorDeviceClass.MOISTURE: FLOW_SENSOR_MOISTURE,
+            SensorDeviceClass.CO2: FLOW_SENSOR_CO2,
+            SensorDeviceClass.ENERGY: FLOW_SENSOR_POWER_CONSUMPTION,
+            SensorDeviceClass.PH: FLOW_SENSOR_PH
+        }
+        
+        # For each tent sensor, find the matching plant sensor and replace it
+        for sensor_entity_id in tent_sensors:
+            # Get the sensor state to determine its type
+            sensor_state = self.hass.states.get(sensor_entity_id)
+            if not sensor_state:
+                _LOGGER.warning("Sensor %s not found in state registry", sensor_entity_id)
+                continue
+                
+            device_class = sensor_state.attributes.get(ATTR_DEVICE_CLASS)
+            
+            # Find the matching plant sensor based on device class
+            if device_class in sensor_mapping:
+                sensor_attr_name = sensor_mapping[device_class]
+                # Update the plant info with this sensor
+                self.plant_info[sensor_attr_name] = sensor_entity_id
+                _LOGGER.info("Mapped tent sensor %s to plant attribute %s", sensor_entity_id, sensor_attr_name)
 
         data_schema = {}
         extra_desc = ""
@@ -2292,6 +2405,32 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Optional(
                     FLOW_POWER_CONSUMPTION_TRIGGER,
                     default=self.plant.power_consumption_trigger,
+                )
+            ] = cv.boolean
+
+            # Add new status stabilization options
+            data_schema[
+                vol.Optional(
+                    "status_debounce_time",
+                    default=self.entry.options.get("status_debounce_time", 0),
+                )
+            ] = cv.positive_int
+            data_schema[
+                vol.Optional(
+                    "hysteresis_percentage",
+                    default=self.entry.options.get("hysteresis_percentage", 0.0),
+                )
+            ] = vol.Coerce(float)
+            data_schema[
+                vol.Optional(
+                    "stabilization_window",
+                    default=self.entry.options.get("stabilization_window", 0),
+                )
+            ] = cv.positive_int
+            data_schema[
+                vol.Optional(
+                    "verbose_logging",
+                    default=self.entry.options.get("verbose_logging", False),
                 )
             ] = cv.boolean
 

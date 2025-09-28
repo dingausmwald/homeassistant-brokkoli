@@ -25,6 +25,7 @@ ATTR_WATER_CONSUMPTION = "water_consumption"
 ATTR_FERTILIZER_CONSUMPTION = "fertilizer_consumption"
 ATTR_POWER_CONSUMPTION = "power_consumption"
 ATTR_PH = "ph"
+ATTR_NAME = "name"
 
 # Device Classes
 DEVICE_CLASS_PH = "ph"  # Eigene Device Class für pH
@@ -147,6 +148,7 @@ FLOW_CONDUCTIVITY_TRIGGER = "conductivity_trigger"
 FLOW_WATER_CONSUMPTION_TRIGGER = "water_consumption_trigger"
 FLOW_FERTILIZER_CONSUMPTION_TRIGGER = "fertilizer_consumption_trigger"
 FLOW_POWER_CONSUMPTION_TRIGGER = "power_consumption_trigger"
+FLOW_PH_TRIGGER = "ph_trigger"  # Add pH trigger
 
 FLOW_FORCE_SPECIES_UPDATE = "force_update"
 
@@ -301,11 +303,13 @@ SERVICE_CREATE_PLANT = "create_plant"
 DEVICE_TYPE_PLANT = "plant"
 DEVICE_TYPE_CYCLE = "cycle"
 DEVICE_TYPE_CONFIG = "config"  # Neuer Gerätetyp für Konfiguration
+DEVICE_TYPE_TENT = "tent"  # Neue Gerätetyp für Tent
 ATTR_DEVICE_TYPE = "device_type"
 
 DEVICE_TYPES = [
     DEVICE_TYPE_PLANT,
-    DEVICE_TYPE_CYCLE
+    DEVICE_TYPE_CYCLE,
+    DEVICE_TYPE_TENT
 ]  # Config wird nicht in der Auswahl angezeigt
 
 # Icons für Device Types
@@ -357,6 +361,7 @@ DEFAULT_AGGREGATIONS = {
     'total_fertilizer_consumption': AGGREGATION_ORIGINAL,
     'power_consumption': AGGREGATION_MEAN,
     'total_power_consumption': AGGREGATION_ORIGINAL,
+    'energy_cost': AGGREGATION_MEAN,  # Neue Default-Aggregation für Energiekosten
     'health': AGGREGATION_MEAN,  # Hinzugefügt für Health Helper
     'ph': AGGREGATION_MEDIAN,  # Neue Default-Aggregation für pH
 }
@@ -407,6 +412,9 @@ CONF_DEFAULT_MIN_POWER_CONSUMPTION = "default_min_power_consumption"
 CONF_DEFAULT_MAX_POWER_CONSUMPTION = "default_max_power_consumption"
 CONF_DEFAULT_MAX_PH = "default_max_ph"  # Neue Konstanten für pH
 CONF_DEFAULT_MIN_PH = "default_min_ph"
+
+# Neue Konstanten für kWh Preis
+CONF_DEFAULT_KWH_PRICE = "default_kwh_price"
 
 ATTR_WATER_CONSUMPTION = "water_consumption"
 ATTR_FERTILIZER_CONSUMPTION = "fertilizer_consumption"
@@ -460,3 +468,11 @@ ATTR_POSITION_X = "position_x"
 ATTR_POSITION_Y = "position_y"
 SERVICE_CHANGE_POSITION = "change_position"
 ATTR_POSITION_HISTORY = "position_history"
+
+# Tent constants
+SERVICE_CREATE_TENT = "create_tent"
+SERVICE_CHANGE_TENT = "change_tent"
+SERVICE_LIST_TENTS = "list_tents"
+ATTR_TENT_ID = "tent_id"
+ATTR_JOURNAL = "journal"
+ATTR_MAINTENANCE_ENTRIES = "maintenance_entries"

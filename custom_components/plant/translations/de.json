@@ -457,5 +457,19 @@
         }
       }
     }
+  },
+  "issues": {
+    "sensor_unavailable": {
+      "title": "Sensor nicht verfügbar",
+      "description": "Der {sensor_type}-Sensor für die Pflanze {plant_name} ist derzeit nicht verfügbar."
+    },
+    "invalid_configuration": {
+      "title": "Ungültige Konfiguration",
+      "description": "Pflanze {plant_name} hat eine ungültige Konfiguration: {error}"
+    },
+    "missing_sensor": {
+      "title": "Fehlender Sensor",
+      "description": "Der {sensor_type}-Sensor für die Pflanze {plant_name} fehlt."
+    }
   }
 }

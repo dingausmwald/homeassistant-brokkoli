@@ -16,9 +16,32 @@ def _load_module(module_name, file_path):
     return module
 
 
+def _setup_ha_modules():
+    """Set up minimal HA modules for testing."""
+    # Only set up modules if they don't already exist
+    if "homeassistant.core" not in sys.modules:
+        # Inject minimal dummy module for homeassistant.core
+        dummy_ha_core = type(sys)("homeassistant.core")
+        # Create a minimal HomeAssistant class
+        class HomeAssistant:
+            async def async_start(self):
+                pass
+        setattr(dummy_ha_core, "HomeAssistant", HomeAssistant)
+        sys.modules["homeassistant.core"] = dummy_ha_core
+    
+    if "homeassistant.const" not in sys.modules:
+        # Inject minimal dummy module for homeassistant.const
+        dummy_ha_const = type(sys)("homeassistant.const")
+        setattr(dummy_ha_const, "STATE_UNKNOWN", "unknown")
+        setattr(dummy_ha_const, "STATE_UNAVAILABLE", "unavailable")
+        sys.modules["homeassistant.const"] = dummy_ha_const
+
+
 def test_module_imports():
     """Test that all modules can be imported without errors."""
-    # Test importing const module
+    _setup_ha_modules()
+    
+    # Load required modules
     const = _load_module("custom_components.plant.const", "custom_components/plant/const.py")
     assert const.DOMAIN == "plant"
     
@@ -29,6 +52,8 @@ def test_module_imports():
 
 def test_config_flow_integration():
     """Test config flow integration with constants."""
+    _setup_ha_modules()
+    
     # Load required modules
     const = _load_module("custom_components.plant.const", "custom_components/plant/const.py")
     
@@ -40,6 +65,8 @@ def test_config_flow_integration():
 
 def test_sensor_integration():
     """Test sensor integration with constants and configuration."""
+    _setup_ha_modules()
+    
     # Load required modules
     const = _load_module("custom_components.plant.const", "custom_components/plant/const.py")
     sensor_config = _load_module("custom_components.plant.sensor_configuration", "custom_components/plant/sensor_configuration.py")
@@ -58,6 +85,8 @@ def test_sensor_integration():
 
 def test_service_integration():
     """Test service integration with constants."""
+    _setup_ha_modules()
+    
     # Load required modules
     const = _load_module("custom_components.plant.const", "custom_components/plant/const.py")
     
@@ -70,6 +99,8 @@ def test_service_integration():
 
 def test_data_persistence_integration():
     """Test data persistence integration."""
+    _setup_ha_modules()
+    
     # Load required modules
     const = _load_module("custom_components.plant.const", "custom_components/plant/const.py")
     
@@ -81,6 +112,8 @@ def test_data_persistence_integration():
 
 def test_consumption_integration():
     """Test consumption tracking integration."""
+    _setup_ha_modules()
+    
     # Load required modules
     const = _load_module("custom_components.plant.const", "custom_components/plant/const.py")
     

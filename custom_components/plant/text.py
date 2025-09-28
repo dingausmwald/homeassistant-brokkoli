@@ -19,6 +19,7 @@ from .const import (
     DOMAIN,
     DEVICE_TYPE_PLANT,
     DEVICE_TYPE_CYCLE,
+    DEVICE_TYPE_TENT,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -35,12 +36,17 @@ async def async_setup_entry(
     # Journal für alle Gerätetypen
     journal = PlantJournal(hass, entry, plant)
     entities.append(journal)
-    plant.add_journal(journal)
+    # Für Tents verwenden wir add_journal, für Plants auch
+    if hasattr(plant, 'add_journal'):
+        plant.add_journal(journal)
+    elif hasattr(plant, 'add_journal_text_entity'):
+        plant.add_journal_text_entity(journal)
     
     # Location für alle Gerätetypen (jetzt auch für Cycles)
     location = PlantLocation(hass, entry, plant)
     entities.append(location)
-    plant.add_location_history(location)
+    if hasattr(plant, 'add_location_history'):
+        plant.add_location_history(location)
     
     async_add_entities(entities)
 
