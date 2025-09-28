@@ -46,7 +46,20 @@ if __name__ == "__main__":
         "unit.test_service_functionality",
         "test_plant_entity",
         "integration.test_integration_scenarios",
-        "integration.test_data_persistence"
+        "integration.test_data_persistence",
+        "unit.test_change_tent",
+        "tent_specific.test_tent_config_flow_error_handling",
+        "tent_specific.test_tent_services",
+        "unit.test_change_tent_method_signatures",
+        "tent_specific.test_change_tent_functionality",
+        "test_plant_status",
+        "unit.test_service_schemas_validation",
+        "unit.test_plant_helper",
+        "unit.test_sensor_configuration",
+        "unit.test_plant_meters",
+        "tent_specific.test_tent_creation",
+        "integration.test_data_persistence_extended",
+        "test_config_flow_extended"
     ]
     
     all_passed = True
