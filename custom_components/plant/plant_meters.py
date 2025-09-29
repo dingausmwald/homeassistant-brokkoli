@@ -220,7 +220,7 @@ class PlantCurrentStatus(RestoreSensor):
                     # State is known but unavailable/unknown
                     self._attr_native_value = self._default_state
                 else:
-                    # Sensor not found
+                    # Sensor not found - only log at debug level to reduce noise
                     _LOGGER.debug(
                         "External sensor %s not found for %s, setting to default: %s",
                         self._external_sensor,
@@ -246,6 +246,7 @@ class PlantCurrentStatus(RestoreSensor):
                 )
                 self._attr_native_value = self._default_state
         else:
+            # Only log when verbose debugging is needed
             _LOGGER.debug(
                 "External sensor not set for %s, setting to default: %s",
                 self.entity_id,

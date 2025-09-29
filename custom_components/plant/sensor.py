@@ -425,7 +425,9 @@ class PlantCurrentStatus(RestoreSensor):
 
     def replace_external_sensor(self, new_sensor: str | None) -> None:
         """Modify the external sensor"""
-        _LOGGER.info("Setting %s external sensor to %s", self.entity_id, new_sensor)
+        # Only log when the sensor actually changes to reduce noise
+        if self._external_sensor != new_sensor:
+            _LOGGER.info("Setting %s external sensor to %s", self.entity_id, new_sensor)
         self._external_sensor = new_sensor
         if new_sensor:
             async_track_state_change_event(

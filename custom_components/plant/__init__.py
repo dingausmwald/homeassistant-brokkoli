@@ -2022,9 +2022,9 @@ class PlantDevice(Entity):
                     
                     if is_co2_issue and co2_stabilized and self.CO2_trigger:
                         new_state = STATE_PROBLEM
-                        _LOGGER.debug("CO2 is %s and stabilized, setting plant state to PROBLEM", new_co2_status)
-                    elif not is_co2_issue:
-                        _LOGGER.debug("CO2 is OK")
+                        sensor_status_messages.append(f"CO2 is {new_co2_status}")
+                    elif not is_co2_issue and self._verbose_logging:
+                        sensor_status_messages.append("CO2 is OK")
                 except (ValueError, TypeError) as e:
                     _LOGGER.warning("Invalid value for CO2 sensor: %s", str(e))
 
@@ -2055,9 +2055,9 @@ class PlantDevice(Entity):
                     
                     if is_dli_issue and dli_stabilized and self.dli_trigger:
                         new_state = STATE_PROBLEM
-                        _LOGGER.debug("DLI is %s and stabilized, setting plant state to PROBLEM", new_dli_status)
-                    elif not is_dli_issue:
-                        _LOGGER.debug("DLI is OK")
+                        sensor_status_messages.append(f"DLI is {new_dli_status}")
+                    elif not is_dli_issue and self._verbose_logging:
+                        sensor_status_messages.append("DLI is OK")
                 except (ValueError, TypeError) as e:
                     _LOGGER.warning("Invalid value for DLI sensor: %s", str(e))
 
@@ -2089,9 +2089,9 @@ class PlantDevice(Entity):
                     
                     if is_water_issue and water_stabilized and self.water_consumption_trigger:
                         new_state = STATE_PROBLEM
-                        _LOGGER.debug("Water consumption is %s and stabilized, setting plant state to PROBLEM", new_water_status)
-                    elif not is_water_issue:
-                        _LOGGER.debug("Water consumption is OK")
+                        sensor_status_messages.append(f"Water consumption is {new_water_status}")
+                    elif not is_water_issue and self._verbose_logging:
+                        sensor_status_messages.append("Water consumption is OK")
                 except (ValueError, TypeError) as e:
                     _LOGGER.warning("Invalid value for water consumption sensor: %s", str(e))
 
@@ -2123,9 +2123,9 @@ class PlantDevice(Entity):
                     
                     if is_fert_issue and fert_stabilized and self.fertilizer_consumption_trigger:
                         new_state = STATE_PROBLEM
-                        _LOGGER.debug("Fertilizer consumption is %s and stabilized, setting plant state to PROBLEM", new_fert_status)
-                    elif not is_fert_issue:
-                        _LOGGER.debug("Fertilizer consumption is OK")
+                        sensor_status_messages.append(f"Fertilizer consumption is {new_fert_status}")
+                    elif not is_fert_issue and self._verbose_logging:
+                        sensor_status_messages.append("Fertilizer consumption is OK")
                 except (ValueError, TypeError) as e:
                     _LOGGER.warning("Invalid value for fertilizer consumption sensor: %s", str(e))
 
@@ -2157,9 +2157,9 @@ class PlantDevice(Entity):
                     
                     if is_power_issue and power_stabilized and self.power_consumption_trigger:
                         new_state = STATE_PROBLEM
-                        _LOGGER.debug("Power consumption is %s and stabilized, setting plant state to PROBLEM", new_power_status)
-                    elif not is_power_issue:
-                        _LOGGER.debug("Power consumption is OK")
+                        sensor_status_messages.append(f"Power consumption is {new_power_status}")
+                    elif not is_power_issue and self._verbose_logging:
+                        sensor_status_messages.append("Power consumption is OK")
                 except (ValueError, TypeError) as e:
                     _LOGGER.warning("Invalid value for power consumption sensor: %s", str(e))
 
@@ -2191,11 +2191,19 @@ class PlantDevice(Entity):
                     
                     if is_ph_issue and ph_stabilized and self.ph_trigger:
                         new_state = STATE_PROBLEM
-                        _LOGGER.debug("pH is %s and stabilized, setting plant state to PROBLEM", new_ph_status)
-                    elif not is_ph_issue:
-                        _LOGGER.debug("pH is OK")
+                        sensor_status_messages.append(f"pH is {new_ph_status}")
+                    elif not is_ph_issue and self._verbose_logging:
+                        sensor_status_messages.append("pH is OK")
                 except (ValueError, TypeError) as e:
                     _LOGGER.warning("Invalid value for pH sensor: %s", str(e))
+
+        # Consolidated logging - only log when there's an issue or when verbose logging is enabled
+        if sensor_status_messages and (new_state == STATE_PROBLEM or self._verbose_logging):
+            status_summary = ", ".join(sensor_status_messages)
+            if new_state == STATE_PROBLEM:
+                _LOGGER.debug("Plant %s status: %s. Setting state to PROBLEM", self.name, status_summary)
+            elif self._verbose_logging:
+                _LOGGER.debug("Plant %s status: %s", self.name, status_summary)
 
         # Apply debounce if configured (Phase 1)
         if self._status_debounce_time > 0:

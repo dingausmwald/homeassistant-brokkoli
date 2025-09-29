@@ -1219,13 +1219,14 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             _LOGGER.warning("Plant entity %s not found for add_watering", entity_id)
             return
 
-        # Update journal entry (prepend concise log)
+        # Update journal entry (only record the watering amount without any preceding message)
         try:
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
-            journal_line = f"{timestamp}: Gegossen {amount_liters} L" + (f" - {note}" if note else "")
             if hasattr(target_plant, "journal") and target_plant.journal:
+                # Only add the watering amount to the journal, without any additional text
                 current = target_plant.journal.state or ""
-                new_text = f"{journal_line}\n{current}" if current else journal_line
+                # Format: Just the amount in liters, optionally with note if provided
+                journal_entry = f"{amount_liters} L" + (f" - {note}" if note else "")
+                new_text = f"{journal_entry}\n{current}" if current else journal_entry
                 await target_plant.journal.async_set_value(new_text)
         except Exception as e:
             _LOGGER.debug("Could not update journal on add_watering: %s", e)
