@@ -347,7 +347,7 @@
           "name": "Duração da floração",
           "description": "Duração da fase de floração em dias"
         },
-        "harvested_date": {
+        "harvested_start": {
           "name": "Data da colheita",
           "description": "Data da colheita"
         },
@@ -355,7 +355,7 @@
           "name": "Duração desde colheita",
           "description": "Duração desde a colheita em dias"
         },
-        "removed_date": {
+        "removed_start": {
           "name": "Data de remoção",
           "description": "Data de remoção"
         },

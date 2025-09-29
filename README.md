@@ -14,12 +14,13 @@ A Home Assistant integration for monitoring cannabis plants with sensors and con
 - Cycle system for grouping plants together
 
 ### Supported Sensors
-- **Moisture**: Soil moisture percentage
+- **Moisture**: Soil moisture percentage 
 - **Temperature**: Ambient temperature (°C/°F)
 - **Light/Brightness**: Light intensity (lux)
 - **Conductivity**: Soil conductivity (µS/cm)
 - **pH**: Soil pH level
 - **Humidity**: Air humidity percentage
+- **Co2**: Air CO2 ppm
 - **Power**: Power consumption monitoring
 - **Daily Light Integral (DLI)**: Calculated from light sensors
 
@@ -55,6 +56,34 @@ For the complete Brokkoli Suite, install these complementary components:
 
 1. Copy the `custom_components/plant/` directory to your `<config>/custom_components/` directory
 2. Restart Home Assistant
+
+## 🗑️ Removal
+
+To remove a plant and all its associated entities:
+
+1. Go to **Settings** → **Devices & Services**
+2. Find your plant device in the list
+3. Click on the plant device to open its details
+4. Click the **Remove** button
+5. Confirm the removal when prompted
+
+Alternatively, you can use the `plant.remove_plant` service:
+
+1. Go to **Developer Tools** → **Services**
+2. Select `plant.remove_plant` from the service dropdown
+3. Select the plant entity you want to remove
+4. Click **Call Service**
+
+### Step-by-Step Removal Process
+
+When you remove a plant, the following happens:
+
+1. **Entity Removal**: All sensor entities, threshold entities, and helper entities associated with the plant are removed
+2. **Device Cleanup**: The plant device and all its entities are unregistered from Home Assistant
+3. **Configuration Deletion**: The plant's configuration entry is removed from Home Assistant's configuration
+4. **Data Purging**: All plant-specific data, including historical sensor data, is removed
+
+**Note**: This action is irreversible. Make sure to export your plant configuration using the `plant.export_plants` service if you want to keep a backup before removal.
 
 ## 🚀 Quick Start
 
@@ -104,6 +133,21 @@ Customize which sensor violations trigger problem states:
 3. Click **Configure**
 4. Choose which threshold violations should trigger alerts
 
+### Status Stabilization
+Prevent rapid state changes (flickering) between "Problem" and "OK" states with these advanced stabilization features:
+
+- **Status Debounce**: Set a minimum time that a status change must be sustained before it's applied
+- **Hysteresis**: Add a margin around threshold values to prevent rapid switching when sensor values are near thresholds
+- **Stabilization Window**: Require sensor issues to be sustained for a minimum time before triggering problem states
+- **Verbose Logging**: Enable detailed logging for debugging status changes
+
+To configure these features:
+
+1. Navigate to **Settings** → **Devices & Services** → **Plant Monitor**
+2. Select your plant device
+3. Click **Configure**
+4. Adjust the status stabilization settings in the configuration panel
+
 ### Strain Management
 Update cannabis strain and refresh data from Seedfinder:
 
@@ -111,6 +155,12 @@ Update cannabis strain and refresh data from Seedfinder:
 2. Enter the exact strain name (Seedfinder PID format)
 3. Enable "Force refresh" to update all data including images
 4. Strain changes take effect immediately
+
+### Central sensor decimals
+- Centralized defaults are defined in `custom_components/plant/sensor_configuration.py`.
+- The central config entry "Plant Monitor Konfiguration" exposes decimal options per sensor (e.g. `decimals_temperature`, `decimals_humidity`, `decimals_illuminance`, `decimals_ppfd`, `decimals_dli`, `decimals_total_water_consumption`, ...).
+- All live current sensors (temperature, humidity, illuminance, moisture, conductivity, CO2, ppfd, pH) and derived values use these settings for consistent rounding.
+- Manual updates (e.g. add watering) also respect the configured decimals.
 
 ## 📱 Available Services
 
@@ -131,6 +181,15 @@ The integration provides various services to interact with your cannabis plants:
 - `plant.import_plants` - Import plant configurations
 
 These services are integrated into the [Brokkoli Card](https://github.com/dingausmwald/lovelace-brokkoli-card) interface for convenient operation, or can be used directly in automations and scripts.
+
+## 🧪 Development and Testing
+
+For developers interested in contributing to the Brokkoli integration, comprehensive technical documentation is available in the [DEVELOPMENT.md](file:///d:/Python/2/homeassistant-brokkoli/DEVELOPMENT.md) file. This includes:
+
+- Testing strategy and test organization
+- Architecture overview
+- Development best practices
+- Quality metrics and troubleshooting tips
 
 ## 🆘 Troubleshooting
 
@@ -161,4 +220,3 @@ If you find this project helpful, consider supporting its development:
 ---
 
 **Part of the Brokkoli Suite** - Cannabis cultivation tracking for Home Assistant
-

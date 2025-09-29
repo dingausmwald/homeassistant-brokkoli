@@ -347,7 +347,7 @@
           "name": "Blüte-Dauer",
           "description": "Dauer der Blüte-Phase in Tagen"
         },
-        "harvested_date": {
+        "harvested_start": {
           "name": "Ernte-Datum",
           "description": "Datum der Ernte"
         },
@@ -355,7 +355,7 @@
           "name": "Ernte-Dauer",
           "description": "Dauer seit der Ernte in Tagen"
         },
-        "removed_date": {
+        "removed_start": {
           "name": "Entfernt-Datum",
           "description": "Datum der Entfernung"
         },
@@ -456,6 +456,20 @@
           "description": "Y-Koordinate der Pflanze"
         }
       }
+    }
+  },
+  "issues": {
+    "sensor_unavailable": {
+      "title": "Sensor nicht verfügbar",
+      "description": "Der {sensor_type}-Sensor für die Pflanze {plant_name} ist derzeit nicht verfügbar."
+    },
+    "invalid_configuration": {
+      "title": "Ungültige Konfiguration",
+      "description": "Pflanze {plant_name} hat eine ungültige Konfiguration: {error}"
+    },
+    "missing_sensor": {
+      "title": "Fehlender Sensor",
+      "description": "Der {sensor_type}-Sensor für die Pflanze {plant_name} fehlt."
     }
   }
 }

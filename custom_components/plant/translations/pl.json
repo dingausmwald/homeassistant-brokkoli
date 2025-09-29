@@ -347,7 +347,7 @@
           "name": "Czas trwania kwitnienia",
           "description": "Czas trwania fazy kwitnienia w dniach"
         },
-        "harvested_date": {
+        "harvested_start": {
           "name": "Data zbioru",
           "description": "Data zbioru"
         },
@@ -355,7 +355,7 @@
           "name": "Czas od zbioru",
           "description": "Czas od zbioru w dniach"
         },
-        "removed_date": {
+        "removed_start": {
           "name": "Data usunięcia",
           "description": "Data usunięcia"
         },

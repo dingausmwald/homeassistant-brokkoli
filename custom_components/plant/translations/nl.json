@@ -347,7 +347,7 @@
           "name": "Bloei duur",
           "description": "Duur van bloei fase in dagen"
         },
-        "harvested_date": {
+        "harvested_start": {
           "name": "Oogst datum",
           "description": "Datum van oogst"
         },
@@ -355,7 +355,7 @@
           "name": "Duur sinds oogst",
           "description": "Duur sinds oogst in dagen"
         },
-        "removed_date": {
+        "removed_start": {
           "name": "Verwijder datum",
           "description": "Datum van verwijdering"
         },

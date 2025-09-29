@@ -38,12 +38,14 @@ from .const import (
     CONF_MAX_CONDUCTIVITY,
     CONF_MAX_DLI,
     CONF_MAX_HUMIDITY,
+    CONF_MAX_CO2,
     CONF_MAX_ILLUMINANCE,
     CONF_MAX_MOISTURE,
     CONF_MAX_TEMPERATURE,
     CONF_MIN_CONDUCTIVITY,
     CONF_MIN_DLI,
     CONF_MIN_HUMIDITY,
+    CONF_MIN_CO2,
     CONF_MIN_ILLUMINANCE,
     CONF_MIN_MOISTURE,
     CONF_MIN_TEMPERATURE,
@@ -55,6 +57,7 @@ from .const import (
     DEFAULT_MAX_CONDUCTIVITY,
     DEFAULT_MAX_DLI,
     DEFAULT_MAX_HUMIDITY,
+    DEFAULT_MAX_CO2,
     DEFAULT_MAX_ILLUMINANCE,
     DEFAULT_MAX_MOISTURE,
     DEFAULT_MAX_TEMPERATURE,
@@ -65,6 +68,7 @@ from .const import (
     DEFAULT_MIN_CONDUCTIVITY,
     DEFAULT_MIN_DLI,
     DEFAULT_MIN_HUMIDITY,
+    DEFAULT_MIN_CO2,
     DEFAULT_MIN_ILLUMINANCE,
     DEFAULT_MIN_MOISTURE,
     DEFAULT_MIN_TEMPERATURE,
@@ -76,6 +80,7 @@ from .const import (
     READING_CONDUCTIVITY,
     READING_DLI,
     READING_HUMIDITY,
+    READING_CO2,
     READING_ILLUMINANCE,
     READING_MOISTURE,
     READING_TEMPERATURE,
@@ -88,6 +93,7 @@ from .const import (
     ICON_CONDUCTIVITY,
     ICON_DLI,
     ICON_HUMIDITY,
+    ICON_CO2,
     ICON_ILLUMINANCE,
     ICON_MOISTURE,
     ICON_PPFD,
@@ -149,6 +155,8 @@ class PlantMinMax(RestoreNumber):
             self._attr_icon = ICON_CONDUCTIVITY
         elif "humidity" in self.entity_id:
             self._attr_icon = ICON_HUMIDITY
+        elif "CO2" in self.entity_id:
+            self._attr_icon = ICON_CO2
         elif "illuminance" in self.entity_id:
             self._attr_icon = ICON_ILLUMINANCE
         elif "dli" in self.entity_id:
@@ -267,6 +275,7 @@ class PlantMaxMoisture(PlantMinMax):
     @property
     def device_class(self):
         return f"{SensorDeviceClass.HUMIDITY} threshold"
+        # return f"{SensorDeviceClass.MOISTURE} threshold" #FIXME
 
     limit_key = CONF_MAX_MOISTURE
     default_value = DEFAULT_MAX_MOISTURE
@@ -294,6 +303,7 @@ class PlantMinMoisture(PlantMinMax):
     @property
     def device_class(self):
         return f"{SensorDeviceClass.HUMIDITY} threshold"
+        # return f"{SensorDeviceClass.MOISTURE} threshold" #FIXME
 
     limit_key = CONF_MIN_MOISTURE
     default_value = DEFAULT_MIN_MOISTURE
@@ -694,6 +704,53 @@ class PlantMinHumidity(PlantMinMax):
 
     limit_key = CONF_MIN_HUMIDITY
     default_value = DEFAULT_MIN_HUMIDITY
+
+class PlantMaxCO2(PlantMinMax):
+    """Entity class for max CO2 threshold"""
+
+    def __init__(self, hass: HomeAssistant, config: ConfigEntry, plantdevice: Entity) -> None:
+        self._attr_name = f"{plantdevice.name} {ATTR_MAX} {READING_CO2}"
+        self._attr_native_value = config.data[FLOW_PLANT_INFO][FLOW_PLANT_LIMITS].get(
+            CONF_MAX_CO2, DEFAULT_MAX_CO2
+        )
+        self._attr_unique_id = f"{config.entry_id}-max-CO2"
+        self._attr_native_unit_of_measurement = "ppm"
+        self._attr_native_max_value = 5000
+        self._attr_native_min_value = 1000
+        self._attr_native_step = 100
+        
+        super().__init__(hass, config, plantdevice)
+
+    @property
+    def device_class(self):
+        return f"{SensorDeviceClass.CO2} threshold"
+
+    limit_key = CONF_MAX_CO2
+    default_value = DEFAULT_MAX_CO2
+
+
+class PlantMinCO2(PlantMinMax):
+    """Entity class for min conductivity threshold"""
+
+    def __init__(self, hass: HomeAssistant, config: ConfigEntry, plantdevice: Entity) -> None:
+        self._attr_name = f"{plantdevice.name} {ATTR_MIN} {READING_CO2}"
+        self._attr_native_value = config.data[FLOW_PLANT_INFO][FLOW_PLANT_LIMITS].get(
+            CONF_MIN_CO2, DEFAULT_MIN_CO2
+        )
+        self._attr_unique_id = f"{config.entry_id}-min-CO2"
+        self._attr_native_unit_of_measurement = "ppm"
+        self._attr_native_max_value = 4000
+        self._attr_native_min_value = 0
+        self._attr_native_step = 100
+        
+        super().__init__(hass, config, plantdevice)
+
+    @property
+    def device_class(self):
+        return f"{SensorDeviceClass.CO2} threshold"
+
+    limit_key = CONF_MIN_CO2
+    default_value = DEFAULT_MIN_CO2
 
 
 class PlantMaxWaterConsumption(PlantMinMax):

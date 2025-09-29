@@ -347,7 +347,7 @@
           "name": "Durata fioritura",
           "description": "Durata fase fioritura in giorni"
         },
-        "harvested_date": {
+        "harvested_start": {
           "name": "Data raccolta",
           "description": "Data di raccolta"
         },
@@ -355,7 +355,7 @@
           "name": "Durata da raccolta",
           "description": "Durata dalla raccolta in giorni"
         },
-        "removed_date": {
+        "removed_start": {
           "name": "Data rimozione",
           "description": "Data di rimozione"
         },

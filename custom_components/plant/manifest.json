@@ -5,10 +5,13 @@
     "recorder",
     "seedfinder",
     "integration",
-    "utility_meter"
+    "utility_meter",
+    "diagnostics",
+    "repairs"
   ],
   "codeowners": [
     "@Olen",
+    "@CodingMush",
     "@dingausmwald"
   ],
   "config_flow": true,
@@ -17,7 +20,7 @@
   "requirements": [
     "async-timeout>=4.0.2"
   ],
-  "version": "2025.4.0-beta1",
+  "version": "2025.9.0",
   "translations": [
     {
       "platform": "config_flow",
@@ -25,5 +28,6 @@
       "languages": ["en", "de"]
     }
   ],
-  "iot_class": "local_push"
+  "iot_class": "local_push",
+  "icon": "custom_components/plant/icon.svg"
 }

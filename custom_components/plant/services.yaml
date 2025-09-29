@@ -120,6 +120,14 @@ create_plant:
         entity:
           domain: sensor
           device_class: humidity
+    CO2_sensor:
+      name: CO2 Sensor
+      description: CO2 sensor
+      required: false
+      selector:
+        entity:
+          domain: sensor
+          device_class: CO2
     power_consumption_sensor:
       name: Power Consumption Sensor
       description: Energieverbrauchssensor
@@ -246,6 +254,14 @@ clone_plant:
         entity:
           domain: sensor
           device_class: humidity
+    CO2_sensor:
+      name: CO2 Sensor
+      description: CO2 sensor for the clone
+      required: false
+      selector:
+        entity:
+          domain: sensor
+          device_class: CO2
     power_consumption_sensor:
       name: Power Consumption Sensor
       description: Power consumption sensor for the clone
@@ -518,7 +534,7 @@ update_plant_attributes:
           min: 0
           max: 365
           mode: box
-    harvested_date:
+    harvested_start:
       name: Harvested Date
       description: Date of harvest
       example: "2024-05-01"
@@ -534,7 +550,7 @@ update_plant_attributes:
           min: 0
           max: 365
           mode: box
-    removed_date:
+    removed_start:
       name: Removed Date
       description: Date of removal
       example: "2024-05-01"
@@ -721,3 +737,177 @@ import_plants:
       selector:
         boolean:
 
+add_watering:
+  name: Add watering entry
+  description: Fügt einen manuellen Bewässerungseintrag hinzu und addiert ihn zur Gesamt-Wasserverbrauchsanzeige.
+  fields:
+    entity_id:
+      name: Plant entity
+      description: Die Pflanze oder der Cycle, für den der Eintrag hinzugefügt wird
+      required: true
+      selector:
+        entity:
+          domain:
+            - plant
+            - cycle
+    amount_liters:
+      name: Menge (L)
+      description: Zu addierende Wassermenge in Litern
+      example: 2
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 1000
+          step: 0.1
+          unit_of_measurement: L
+          mode: box
+    note:
+      name: Notiz
+      description: Optionaler Kommentar, der im Journal vermerkt wird
+      required: false
+      selector:
+        text:
+
+add_conductivity:
+  name: Add EC measurement
+  description: Fügt eine manuelle Leitfähigkeitsmessung (uS/cm) hinzu und setzt den aktuellen Conductivity-Sensor.
+  fields:
+    entity_id:
+      name: Plant entity
+      description: Die Pflanze oder der Cycle, für den der Messwert gesetzt wird
+      required: true
+      selector:
+        entity:
+          domain:
+            - plant
+            - cycle
+    value_us_cm:
+      name: EC (uS/cm)
+      description: Leitfähigkeit in Mikro-Siemens pro cm
+      example: 1200
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 100000
+          step: 1
+          unit_of_measurement: uS/cm
+          mode: box
+
+add_ph:
+  name: Add pH measurement
+  description: Fügt eine manuelle pH-Messung hinzu und setzt den aktuellen pH-Sensor.
+  fields:
+    entity_id:
+      name: Plant entity
+      description: Die Pflanze oder der Cycle, für den der Messwert gesetzt wird
+      required: true
+      selector:
+        entity:
+          domain:
+            - plant
+            - cycle
+    value:
+      name: pH
+      description: pH-Wert (0-14)
+      example: 6.5
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 14
+          step: 0.1
+          mode: box
+
+change_tent:
+  name: Change tent assignment
+  description: Changes the tent assignment for a plant and updates its sensors.
+  fields:
+    entity_id:
+      name: Plant entity
+      description: The plant entity to change tent assignment for
+      example: "plant.my_plant"
+      required: true
+      selector:
+        entity:
+          domain: plant
+          integration: plant
+    tent_id:
+      name: Tent ID
+      description: The ID of the tent to assign to the plant
+      example: "tent_12345"
+      required: false
+      selector:
+        text:
+          type: text
+    tent_name:
+      name: Tent Name
+      description: The name of the tent to assign to the plant
+      example: "Grow Tent 1"
+      required: false
+      selector:
+        text:
+          type: text
+
+create_tent:
+  name: Create tent
+  description: Creates a new tent for managing plant sensors.
+  fields:
+    name:
+      name: Tent name
+      description: The name of the tent to create
+      example: "Grow Tent 1"
+      required: true
+      selector:
+        text:
+          type: text
+    illuminance_sensor:
+      name: Illuminance Sensor
+      description: Illuminance sensor for the tent
+      required: false
+      selector:
+        entity:
+          domain: sensor
+          device_class: illuminance
+      example: "sensor.grow_tent_illuminance"
+    humidity_sensor:
+      name: Humidity Sensor
+      description: Humidity sensor for the tent
+      required: false
+      selector:
+        entity:
+          domain: sensor
+          device_class: humidity
+      example: "sensor.grow_tent_humidity"
+    co2_sensor:
+      name: CO2 Sensor
+      description: CO2 sensor for the tent
+      required: false
+      selector:
+        entity:
+          domain: sensor
+          device_class: carbon_dioxide
+      example: "sensor.grow_tent_co2"
+    power_consumption_sensor:
+      name: Power Consumption Sensor
+      description: Power consumption sensor for the tent
+      required: false
+      selector:
+        entity:
+          domain: sensor
+          device_class: power
+      example: "sensor.grow_tent_power"
+    ph_sensor:
+      name: pH Sensor
+      description: pH sensor for the tent
+      required: false
+      selector:
+        entity:
+          domain: sensor
+      example: "sensor.grow_tent_ph"
+
+list_tents:
+  name: List tents
+  description: Lists all available tents and their sensor configurations.
+  fields: { }

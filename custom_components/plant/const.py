@@ -16,6 +16,7 @@ ATTR_MOISTURE = "moisture"
 ATTR_CONDUCTIVITY = "conductivity"
 ATTR_ILLUMINANCE = "illuminance"
 ATTR_HUMIDITY = "humidity"
+ATTR_CO2 = "co2"
 ATTR_PPFD = "ppfd"
 ATTR_MMOL = "mmol"
 ATTR_MOL = "mol"
@@ -24,6 +25,7 @@ ATTR_WATER_CONSUMPTION = "water_consumption"
 ATTR_FERTILIZER_CONSUMPTION = "fertilizer_consumption"
 ATTR_POWER_CONSUMPTION = "power_consumption"
 ATTR_PH = "ph"
+ATTR_NAME = "name"
 
 # Device Classes
 DEVICE_CLASS_PH = "ph"  # Eigene Device Class für pH
@@ -51,6 +53,7 @@ READING_MOISTURE = "soil moisture"
 READING_CONDUCTIVITY = "conductivity"
 READING_ILLUMINANCE = "illuminance"
 READING_HUMIDITY = "air humidity"
+READING_CO2 = "air CO2"
 READING_PPFD = "ppfd (mol)"
 READING_MMOL = "mmol"
 READING_MOL = "mol"
@@ -77,6 +80,8 @@ DEFAULT_MIN_ILLUMINANCE = 0
 DEFAULT_MAX_ILLUMINANCE = 100000
 DEFAULT_MIN_HUMIDITY = 20
 DEFAULT_MAX_HUMIDITY = 60
+DEFAULT_MIN_CO2 = 60
+DEFAULT_MAX_CO2 = 60
 DEFAULT_MIN_MMOL = 2000
 DEFAULT_MAX_MMOL = 20000
 DEFAULT_MIN_MOL = 2
@@ -128,12 +133,14 @@ FLOW_SENSOR_MOISTURE = "moisture_sensor"
 FLOW_SENSOR_CONDUCTIVITY = "conductivity_sensor"
 FLOW_SENSOR_ILLUMINANCE = "illuminance_sensor"
 FLOW_SENSOR_HUMIDITY = "humidity_sensor"
+FLOW_SENSOR_CO2 = "co2_sensor"
 FLOW_SENSOR_POWER_CONSUMPTION = "power_consumption_sensor"
 FLOW_SENSOR_PH = "ph_sensor"
 
 FLOW_TEMP_UNIT = "temperature_unit"
 FLOW_ILLUMINANCE_TRIGGER = "illuminance_trigger"
 FLOW_HUMIDITY_TRIGGER = "humidity_trigger"
+FLOW_CO2_TRIGGER = "co2_trigger"
 FLOW_TEMPERATURE_TRIGGER = "temperature_trigger"
 FLOW_DLI_TRIGGER = "dli_trigger"
 FLOW_MOISTURE_TRIGGER = "moisture_trigger"
@@ -141,12 +148,14 @@ FLOW_CONDUCTIVITY_TRIGGER = "conductivity_trigger"
 FLOW_WATER_CONSUMPTION_TRIGGER = "water_consumption_trigger"
 FLOW_FERTILIZER_CONSUMPTION_TRIGGER = "fertilizer_consumption_trigger"
 FLOW_POWER_CONSUMPTION_TRIGGER = "power_consumption_trigger"
+FLOW_PH_TRIGGER = "ph_trigger"  # Add pH trigger
 
 FLOW_FORCE_SPECIES_UPDATE = "force_update"
 
 ICON_CONDUCTIVITY = "mdi:spa-outline"
 ICON_DLI = "mdi:counter"
 ICON_HUMIDITY = "mdi:water-percent"
+ICON_CO2 = "mdi:molecule-co2"
 ICON_ILLUMINANCE = "mdi:brightness-6"
 ICON_MOISTURE = "mdi:water"
 ICON_PPFD = "mdi:white-balance-sunny"
@@ -191,6 +200,8 @@ CONF_MIN_ILLUMINANCE = f"min_{ATTR_ILLUMINANCE}"
 CONF_MAX_ILLUMINANCE = f"max_{ATTR_ILLUMINANCE}"
 CONF_MIN_HUMIDITY = f"min_{ATTR_HUMIDITY}"
 CONF_MAX_HUMIDITY = f"max_{ATTR_HUMIDITY}"
+CONF_MIN_CO2 = f"min_{ATTR_CO2}"
+CONF_MAX_CO2 = f"max_{ATTR_CO2}"
 CONF_MIN_MMOL = f"min_{ATTR_MMOL}"
 CONF_MAX_MMOL = f"max_{ATTR_MMOL}"
 CONF_MIN_MOL = f"min_{ATTR_MOL}"
@@ -226,6 +237,8 @@ CONF_PLANTBOOK_MAPPING = {
     CONF_MAX_CONDUCTIVITY: "max_soil_ec",
     CONF_MIN_HUMIDITY: "min_env_humid",
     CONF_MAX_HUMIDITY: "max_env_humid",
+    CONF_MIN_CO2: "min_env_co2",
+    CONF_MAX_CO2: "max_env_co2",
     CONF_MIN_MMOL: "min_light_mmol",
     CONF_MAX_MMOL: "max_light_mmol",
     CONF_MIN_POWER_CONSUMPTION: "min_power_consumption",
@@ -290,11 +303,13 @@ SERVICE_CREATE_PLANT = "create_plant"
 DEVICE_TYPE_PLANT = "plant"
 DEVICE_TYPE_CYCLE = "cycle"
 DEVICE_TYPE_CONFIG = "config"  # Neuer Gerätetyp für Konfiguration
+DEVICE_TYPE_TENT = "tent"  # Neue Gerätetyp für Tent
 ATTR_DEVICE_TYPE = "device_type"
 
 DEVICE_TYPES = [
     DEVICE_TYPE_PLANT,
-    DEVICE_TYPE_CYCLE
+    DEVICE_TYPE_CYCLE,
+    DEVICE_TYPE_TENT
 ]  # Config wird nicht in der Auswahl angezeigt
 
 # Icons für Device Types
@@ -336,6 +351,7 @@ DEFAULT_AGGREGATIONS = {
     'conductivity': AGGREGATION_MEDIAN,
     'illuminance': AGGREGATION_MEAN,
     'humidity': AGGREGATION_MEAN,
+    'CO2': AGGREGATION_MEAN,
     'ppfd': AGGREGATION_ORIGINAL,
     'dli': AGGREGATION_ORIGINAL,
     'total_integral': AGGREGATION_ORIGINAL,
@@ -345,6 +361,7 @@ DEFAULT_AGGREGATIONS = {
     'total_fertilizer_consumption': AGGREGATION_ORIGINAL,
     'power_consumption': AGGREGATION_MEAN,
     'total_power_consumption': AGGREGATION_ORIGINAL,
+    'energy_cost': AGGREGATION_MEAN,  # Neue Default-Aggregation für Energiekosten
     'health': AGGREGATION_MEAN,  # Hinzugefügt für Health Helper
     'ph': AGGREGATION_MEDIAN,  # Neue Default-Aggregation für pH
 }
@@ -383,6 +400,8 @@ CONF_DEFAULT_MAX_CONDUCTIVITY = "default_max_conductivity"
 CONF_DEFAULT_MIN_CONDUCTIVITY = "default_min_conductivity"
 CONF_DEFAULT_MAX_HUMIDITY = "default_max_humidity"
 CONF_DEFAULT_MIN_HUMIDITY = "default_min_humidity"
+CONF_DEFAULT_MAX_CO2 = "default_max_co2"
+CONF_DEFAULT_MIN_CO2 = "default_min_co2"
 
 # Neue Default-Konstanten für Water/Fertilizer Consumption
 CONF_DEFAULT_MIN_WATER_CONSUMPTION = "default_min_water_consumption"
@@ -393,6 +412,9 @@ CONF_DEFAULT_MIN_POWER_CONSUMPTION = "default_min_power_consumption"
 CONF_DEFAULT_MAX_POWER_CONSUMPTION = "default_max_power_consumption"
 CONF_DEFAULT_MAX_PH = "default_max_ph"  # Neue Konstanten für pH
 CONF_DEFAULT_MIN_PH = "default_min_ph"
+
+# Neue Konstanten für kWh Preis
+CONF_DEFAULT_KWH_PRICE = "default_kwh_price"
 
 ATTR_WATER_CONSUMPTION = "water_consumption"
 ATTR_FERTILIZER_CONSUMPTION = "fertilizer_consumption"
@@ -406,6 +428,11 @@ ICON_ENERGY_COST = "mdi:currency-eur"  # Icon für Energiekosten
 # Neue Konstanten für Bild-Download
 SERVICE_ADD_IMAGE = "add_image"
 FLOW_DOWNLOAD_PATH = "download_path"
+
+# Service to add manual watering entries
+SERVICE_ADD_WATERING = "add_watering"
+SERVICE_ADD_CONDUCTIVITY = "add_conductivity"
+SERVICE_ADD_PH = "add_ph"
 
 # Treatment Options
 TREATMENT_NONE = ""
@@ -441,3 +468,11 @@ ATTR_POSITION_X = "position_x"
 ATTR_POSITION_Y = "position_y"
 SERVICE_CHANGE_POSITION = "change_position"
 ATTR_POSITION_HISTORY = "position_history"
+
+# Tent constants
+SERVICE_CREATE_TENT = "create_tent"
+SERVICE_CHANGE_TENT = "change_tent"
+SERVICE_LIST_TENTS = "list_tents"
+ATTR_TENT_ID = "tent_id"
+ATTR_JOURNAL = "journal"
+ATTR_MAINTENANCE_ENTRIES = "maintenance_entries"

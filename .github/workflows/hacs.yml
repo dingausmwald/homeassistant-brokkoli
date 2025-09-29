@@ -1,18 +1,11 @@
-name: HACS Action
+name: disabled
 
 on:
-  push:
-  pull_request:
-  schedule:
-    - cron: "0 0 16 * *"
+  workflow_dispatch:
 
 jobs:
-  hacs:
-    name: HACS Action
-    runs-on: "ubuntu-latest"
+  noop:
+    name: Disabled workflow
+    runs-on: ubuntu-latest
     steps:
-      - name: HACS Action
-        uses: "hacs/action@main"
-        with:
-          category: "integration"
-          ignore: brands
+      - run: echo "HACS workflow disabled"

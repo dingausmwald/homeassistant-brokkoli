@@ -1,29 +1,11 @@
-name: CI
+name: disabled
 
 on:
-  push:
-  pull_request:
-  schedule:
-    - cron:  '0 0 15 * *'
+  workflow_dispatch:
 
 jobs:
-
-  black:
-    name: Python Code Format Check
+  noop:
+    name: Disabled workflow
     runs-on: ubuntu-latest
     steps:
-      - name: Check out code from GitHub
-        uses: "actions/checkout@main"
-      - name: Black Code Format Check
-        uses: lgeiger/black-action@master
-        with:
-          args: ". --check --fast --diff"
-
-  validate:
-    name: Check hassfest
-    runs-on: "ubuntu-latest"
-    steps:
-      - name: Check out code from GitHub
-        uses: "actions/checkout@main"
-      - name: Run hassfest
-        uses: home-assistant/actions/hassfest@master
+      - run: echo "Workflows disabled for now"

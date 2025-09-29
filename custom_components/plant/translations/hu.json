@@ -347,7 +347,7 @@
           "name": "Virágzás időtartama",
           "description": "Virágzási fázis időtartama napokban"
         },
-        "harvested_date": {
+        "harvested_start": {
           "name": "Betakarítás dátuma",
           "description": "Betakarítás dátuma"
         },
@@ -355,7 +355,7 @@
           "name": "Betakarítás óta eltelt idő",
           "description": "Betakarítás óta eltelt idő napokban"
         },
-        "removed_date": {
+        "removed_start": {
           "name": "Eltávolítás dátuma",
           "description": "Eltávolítás dátuma"
         },

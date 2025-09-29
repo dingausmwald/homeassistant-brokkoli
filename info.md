@@ -16,5 +16,5 @@ This integration can automatically fetch data from [Seedfinder](https://github.c
 
 Plants are set up in the UI and all configuration of your plants can be managed there or by automations and scripts.
 
-This Brokkoli integration is available as a beta release in HACS through this repository.
+This Brokkoli integration is available as a release in HACS through this repository. Version 2025.9.0 includes enhanced tent functionality, improved journal and logging, additional sensors like CO2, and sensor precision improvements.
 

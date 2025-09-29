@@ -347,7 +347,7 @@
           "name": "Flower Duration",
           "description": "Duration of flowering phase in days"
         },
-        "harvested_date": {
+        "harvested_start": {
           "name": "Harvested Date",
           "description": "Date of harvest"
         },
@@ -355,7 +355,7 @@
           "name": "Harvested Duration",
           "description": "Duration since harvest in days"
         },
-        "removed_date": {
+        "removed_start": {
           "name": "Removed Date",
           "description": "Date of removal"
         },
@@ -456,6 +456,20 @@
           "description": "Y coordinate position."
         }
       }
+    }
+  },
+  "issues": {
+    "sensor_unavailable": {
+      "title": "Sensor unavailable",
+      "description": "The {sensor_type} sensor for plant {plant_name} is currently unavailable."
+    },
+    "invalid_configuration": {
+      "title": "Invalid configuration",
+      "description": "Plant {plant_name} has an invalid configuration: {error}"
+    },
+    "missing_sensor": {
+      "title": "Missing sensor",
+      "description": "The {sensor_type} sensor for plant {plant_name} is missing."
     }
   }
 }
