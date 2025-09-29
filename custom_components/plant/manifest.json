@@ -11,6 +11,7 @@
   ],
   "codeowners": [
     "@Olen",
+    "@CodingMush",
     "@dingausmwald"
   ],
   "config_flow": true,

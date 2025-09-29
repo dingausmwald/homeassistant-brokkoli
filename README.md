@@ -1,4 +1,4 @@
-# Brokkoli Cannabis Management for Home Assistant (v2025.9.0)
+# Brokkoli Cannabis Management for Home Assistant
 
 **The foundation of the Brokkoli Suite - Cannabis monitoring integration for Home Assistant**
 
@@ -169,8 +169,6 @@ The integration provides various services to interact with your cannabis plants:
 - `plant.replace_sensor` - Replace sensors for a plant
 - `plant.create_plant` - Create a new plant
 - `plant.remove_plant` - Remove a plant and all its entities
-  - **Example**: Remove a plant named "My Plant" by selecting the plant entity `plant.my_plant`
-  - **Note**: This will permanently delete the plant and all associated sensor entities, thresholds, and configuration
 - `plant.clone_plant` - Create a clone/cutting of an existing plant
 - `plant.create_cycle` - Create a new cycle for grouping plants
 - `plant.remove_cycle` - Remove a cycle and all its entities
