@@ -1829,6 +1829,9 @@ class PlantDevice(Entity):
             _LOGGER.debug("Updating plant status for %s", self.name)
         new_state = STATE_OK
         known_state = False
+        
+        # Initialize sensor status messages list for consolidated logging
+        sensor_status_messages = []
 
         if self.sensor_temperature is not None:
             temperature = self.sensor_temperature.state
@@ -1857,9 +1860,9 @@ class PlantDevice(Entity):
                     
                     if is_temp_issue and temp_stabilized and self.temperature_trigger:
                         new_state = STATE_PROBLEM
-                        _LOGGER.debug("Temperature is %s and stabilized, setting plant state to PROBLEM", new_temp_status)
-                    elif not is_temp_issue:
-                        _LOGGER.debug("Temperature is OK")
+                        sensor_status_messages.append(f"Temperature is {new_temp_status}")
+                    elif not is_temp_issue and self._verbose_logging:
+                        sensor_status_messages.append("Temperature is OK")
                 except (ValueError, TypeError) as e:
                     _LOGGER.warning("Invalid value for temperature sensor: %s", str(e))
 
@@ -1890,9 +1893,9 @@ class PlantDevice(Entity):
                     
                     if is_moist_issue and moist_stabilized and self.moisture_trigger:
                         new_state = STATE_PROBLEM
-                        _LOGGER.debug("Moisture is %s and stabilized, setting plant state to PROBLEM", new_moist_status)
-                    elif not is_moist_issue:
-                        _LOGGER.debug("Moisture is OK")
+                        sensor_status_messages.append(f"Moisture is {new_moist_status}")
+                    elif not is_moist_issue and self._verbose_logging:
+                        sensor_status_messages.append("Moisture is OK")
                 except (ValueError, TypeError) as e:
                     _LOGGER.warning("Invalid value for moisture sensor: %s", str(e))
 
@@ -1923,9 +1926,9 @@ class PlantDevice(Entity):
                     
                     if is_cond_issue and cond_stabilized and self.conductivity_trigger:
                         new_state = STATE_PROBLEM
-                        _LOGGER.debug("Conductivity is %s and stabilized, setting plant state to PROBLEM", new_cond_status)
-                    elif not is_cond_issue:
-                        _LOGGER.debug("Conductivity is OK")
+                        sensor_status_messages.append(f"Conductivity is {new_cond_status}")
+                    elif not is_cond_issue and self._verbose_logging:
+                        sensor_status_messages.append("Conductivity is OK")
                 except (ValueError, TypeError) as e:
                     _LOGGER.warning("Invalid value for conductivity sensor: %s", str(e))
 
@@ -1956,9 +1959,9 @@ class PlantDevice(Entity):
                     
                     if is_illum_issue and illum_stabilized and self.illuminance_trigger:
                         new_state = STATE_PROBLEM
-                        _LOGGER.debug("Illuminance is %s and stabilized, setting plant state to PROBLEM", new_illum_status)
-                    elif not is_illum_issue:
-                        _LOGGER.debug("Illuminance is OK")
+                        sensor_status_messages.append(f"Illuminance is {new_illum_status}")
+                    elif not is_illum_issue and self._verbose_logging:
+                        sensor_status_messages.append("Illuminance is OK")
                 except (ValueError, TypeError) as e:
                     _LOGGER.warning("Invalid value for illuminance sensor: %s", str(e))
 
@@ -1989,9 +1992,9 @@ class PlantDevice(Entity):
                     
                     if is_humid_issue and humid_stabilized and self.humidity_trigger:
                         new_state = STATE_PROBLEM
-                        _LOGGER.debug("Humidity is %s and stabilized, setting plant state to PROBLEM", new_humid_status)
-                    elif not is_humid_issue:
-                        _LOGGER.debug("Humidity is OK")
+                        sensor_status_messages.append(f"Humidity is {new_humid_status}")
+                    elif not is_humid_issue and self._verbose_logging:
+                        sensor_status_messages.append("Humidity is OK")
                 except (ValueError, TypeError) as e:
                     _LOGGER.warning("Invalid value for humidity sensor: %s", str(e))
 

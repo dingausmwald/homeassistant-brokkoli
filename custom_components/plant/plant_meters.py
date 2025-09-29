@@ -272,9 +272,11 @@ class PlantCurrentIlluminance(PlantCurrentStatus):
         )
         self._attr_native_unit_of_measurement = LIGHT_LUX
 
-        _LOGGER.info(
-            "Added external sensor for %s %s", self.entity_id, self._external_sensor
-        )
+        # Only log when the external sensor actually changes to reduce noise
+        if self._external_sensor:
+            _LOGGER.info(
+                "Added external sensor for %s %s", self.entity_id, self._external_sensor
+            )
         super().__init__(hass, config, plantdevice)
 
     def sensor_type(self) -> str | None:
