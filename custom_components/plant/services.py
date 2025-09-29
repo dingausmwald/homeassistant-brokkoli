@@ -1223,13 +1223,12 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         try:
             if hasattr(target_plant, "journal") and target_plant.journal:
                 # Only add the watering amount to the journal, without any additional text
-                current = target_plant.journal.state or ""
                 # Format: Just the amount in liters, optionally with note if provided
                 journal_entry = f"{amount_liters} L" + (f" - {note}" if note else "")
-                new_text = f"{journal_entry}\n{current}" if current else journal_entry
-                await target_plant.journal.async_set_value(new_text)
+                await target_plant.journal.async_set_value(journal_entry)
         except Exception as e:
             _LOGGER.debug("Could not update journal on add_watering: %s", e)
+
 
         # Update total water consumption sensor value via helper method if available
         try:
