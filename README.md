@@ -1,4 +1,4 @@
-# Brokkoli Cannabis Management for Home Assistant
+# Brokkoli Cannabis Management for Home Assistant (v2025.9.0)
 
 **The foundation of the Brokkoli Suite - Cannabis monitoring integration for Home Assistant**
 
