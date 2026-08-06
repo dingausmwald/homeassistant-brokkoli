@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+import inspect
 import logging
 import random
 from statistics import quantiles
@@ -110,6 +111,21 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _init_accepts_hass(cls: type) -> bool:
+    """Nimmt cls.__init__ noch ein hass-Argument entgegen?
+
+    HA 2026.8 (Core-PRs #177596/#177597/#177603, "Do not set a device on YAML
+    integration / statistics / utility_meter entities") hat das führende
+    hass-Argument aus IntegrationSensor/StatisticsSensor/UtilityMeterSensor
+    entfernt. Wir übergeben hass deshalb nur noch auf HA < 2026.8; neuere Kerne
+    bekommen ihr Gerät weiterhin über die device_info-Property der Subklasse.
+    """
+    return "hass" in inspect.signature(cls.__init__).parameters
+
+
+_INTEGRATION_SENSOR_ACCEPTS_HASS = _init_accepts_hass(IntegrationSensor)
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ):
@@ -832,17 +848,19 @@ class PlantTotalLightIntegral(IntegrationSensor):
     ) -> None:
         """Initialize the sensor"""
         self._config = config  # Speichere config für späteren Zugriff
-        super().__init__(
-            hass,
-            integration_method=METHOD_TRAPEZOIDAL,
-            name=f"{plantdevice.name} Total {READING_PPFD} Integral",
-            round_digits=2,
-            source_entity=illuminance_ppfd_sensor.entity_id,
-            unique_id=f"{config.entry_id}-ppfd-integral",
-            unit_prefix=None,
-            unit_time=UnitOfTime.SECONDS,
-            max_sub_interval=None,
-        )
+        integration_kwargs = {
+            "integration_method": METHOD_TRAPEZOIDAL,
+            "name": f"{plantdevice.name} Total {READING_PPFD} Integral",
+            "round_digits": 2,
+            "source_entity": illuminance_ppfd_sensor.entity_id,
+            "unique_id": f"{config.entry_id}-ppfd-integral",
+            "unit_prefix": None,
+            "unit_time": UnitOfTime.SECONDS,
+            "max_sub_interval": None,
+        }
+        if _INTEGRATION_SENSOR_ACCEPTS_HASS:
+            integration_kwargs["hass"] = hass
+        super().__init__(**integration_kwargs)
         self._attr_has_entity_name = False
         self._unit_of_measurement = UNIT_PPFD  # Benutze PPFD Einheit statt DLI
         self._attr_native_unit_of_measurement = UNIT_PPFD  # Setze auch native unit

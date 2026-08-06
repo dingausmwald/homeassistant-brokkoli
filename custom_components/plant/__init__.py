@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 from datetime import datetime
@@ -130,6 +131,11 @@ from .plant_helpers import PlantHelper
 from .services import async_setup_services, async_unload_services
 
 _LOGGER = logging.getLogger(__name__)
+
+# Eigener hass.data-Schlüssel für die geteilten EntityComponents. Bewusst nicht
+# unter hass.data[DOMAIN]: dort wird an über zwanzig Stellen über die Schlüssel
+# iteriert, die alle als Config-Entry-IDs behandelt werden.
+DATA_COMPONENTS = "plant_entity_components"
 PLATFORMS = [Platform.NUMBER, Platform.SENSOR, Platform.SELECT, Platform.TEXT]
 
 # Use this during testing to generate some dummy-sensors
@@ -211,17 +217,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    plant_entities = [
-        plant,
-    ]
-
-    # Add all the entities to Hass
-    component = EntityComponent(_LOGGER, plant.device_type, hass)
-    await component.async_add_entities(plant_entities)
+    # Die Haupt-Entität über eine an den Config-Entry gebundene Plattform
+    # hinzufügen (plant.py bzw. cycle.py). Dadurch hängt HA Gerät und
+    # Registry-Eintrag selbst an den Config-Entry - nötig seit HA 2026.8, das
+    # ein Gerät an einer Entität ohne Config-Entry nicht mehr akzeptiert.
+    # Die Komponente wird pro Domain geteilt, nicht pro Eintrag neu erzeugt.
+    _migrate_legacy_registry_entry(hass, plant.device_type, entry.entry_id)
+    component = _get_component(hass, plant.device_type)
+    if not await component.async_setup_entry(entry):
+        _LOGGER.error(
+            "Plattform für Eintrag %s (%s) konnte nicht eingerichtet werden",
+            entry.entry_id,
+            plant.device_type,
+        )
+        return False
 
     # Add the rest of the entities to device registry together with plant
     device_id = plant.device_id
-    await _plant_add_to_device_registry(hass, plant_entities, device_id, entry.entry_id)
     await _plant_add_to_device_registry(hass, plant.integral_entities, device_id, entry.entry_id)
     await _plant_add_to_device_registry(hass, plant.threshold_entities, device_id, entry.entry_id)
     await _plant_add_to_device_registry(hass, plant.meter_entities, device_id, entry.entry_id)
@@ -279,6 +291,58 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
+def _migrate_legacy_registry_entry(
+    hass: HomeAssistant, device_type: str, unique_id: str
+) -> None:
+    """Registry-Eintrag aus der Zeit der frei erzeugten EntityComponent umziehen.
+
+    Früher wurde die Haupt-Entität über eine EntityComponent ohne Config-Entry
+    hinzugefügt. Deren Standard-Plattform trug als Plattformnamen die Domain
+    (`plant` bzw. `cycle`). Die jetzt config-entry-gebundene Plattform trägt
+    stattdessen den Namen der Integration (`plant`).
+
+    Für Pflanzen sind beide Namen identisch, die Einträge bleiben unberührt.
+    Für Cycles ändert sich der Name von `cycle` auf `plant` - HA sieht dann
+    einen fremden Eintrag, der die entity_id blockiert, und hängt der neuen
+    Entität ein `_2` an. Diese Funktion räumt den Alt-Eintrag weg und benennt
+    eine bereits mit Suffix angelegte Entität auf die freigewordene ID zurück.
+    """
+    if device_type == DOMAIN:
+        # Plattformname unverändert, nichts zu tun.
+        return
+
+    erreg = er.async_get(hass)
+    alt_id = erreg.async_get_entity_id(device_type, device_type, unique_id)
+    if alt_id is None:
+        return
+
+    neu_id = erreg.async_get_entity_id(device_type, DOMAIN, unique_id)
+
+    _LOGGER.debug("Entferne Alt-Registry-Eintrag %s (Plattform %s)", alt_id, device_type)
+    erreg.async_remove(alt_id)
+
+    # Wurde beim vorherigen Start schon eine Entität mit Suffix angelegt, bekommt
+    # sie jetzt die freigewordene ID zurück.
+    if neu_id is not None and neu_id != alt_id:
+        _LOGGER.debug("Benenne %s zurück auf %s", neu_id, alt_id)
+        erreg.async_update_entity(neu_id, new_entity_id=alt_id)
+
+
+def _get_component(hass: HomeAssistant, domain: str) -> EntityComponent:
+    """Die geteilte EntityComponent für eine Domain holen bzw. anlegen.
+
+    Früher wurde hier pro Config-Entry eine neue EntityComponent erzeugt. Bei
+    mehreren Pflanzen konkurrierten dadurch mehrere Komponenten auf derselben
+    Domain, und keine davon war an einen Config-Entry gebunden. Eine geteilte
+    Komponente je Domain (`plant`/`cycle`) mit einer Plattform je Eintrag ist
+    das, was HA erwartet.
+    """
+    komponenten = hass.data.setdefault(DATA_COMPONENTS, {})
+    if domain not in komponenten:
+        komponenten[domain] = EntityComponent(_LOGGER, domain, hass)
+    return komponenten[domain]
+
+
 async def _plant_add_to_device_registry(
     hass: HomeAssistant, plant_entities: list[Entity], device_id: str, config_entry_id: str
 ) -> None:
@@ -309,6 +373,17 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if entry.data.get("is_config", False):
         hass.data[DOMAIN].pop(entry.entry_id, None)
         return True
+
+    # Die Plattform dieses Eintrags auf der geteilten Komponente zurücksetzen -
+    # Gegenstück zu component.async_setup_entry oben. Erst dadurch wird die
+    # Haupt-Entität sauber entfernt und ihre entity_id wieder frei, sonst
+    # scheitert ein Reload an einer doppelten unique_id. Einträge, die nie auf
+    # der Komponente eingerichtet wurden, lassen async_unload_entry mit einem
+    # ValueError auflaufen - der ist hier erwartbar.
+    komponenten = hass.data.get(DATA_COMPONENTS, {})
+    for component in komponenten.values():
+        with contextlib.suppress(ValueError):
+            await component.async_unload_entry(entry)
 
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
