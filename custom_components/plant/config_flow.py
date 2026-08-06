@@ -226,7 +226,7 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_DEFAULT_MIN_WATER_CONSUMPTION: 0.1,
                     CONF_DEFAULT_MAX_FERTILIZER_CONSUMPTION: 2000,
                     CONF_DEFAULT_MIN_FERTILIZER_CONSUMPTION: 500,
-                    CONF_DEFAULT_MAX_POWER_CONSUMPTION: 10.0,
+                    CONF_DEFAULT_MAX_POWER_CONSUMPTION: 1000.0,
                     CONF_DEFAULT_MIN_POWER_CONSUMPTION: 0.0,
                     CONF_DEFAULT_MAX_PH: 7.5,
                     CONF_DEFAULT_MIN_PH: 5.5,
@@ -643,7 +643,7 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 CONF_DEFAULT_MIN_WATER_CONSUMPTION: 0.1,
                 CONF_DEFAULT_MAX_FERTILIZER_CONSUMPTION: 2000,
                 CONF_DEFAULT_MIN_FERTILIZER_CONSUMPTION: 500,
-                CONF_DEFAULT_MAX_POWER_CONSUMPTION: 10.0,
+                CONF_DEFAULT_MAX_POWER_CONSUMPTION: 1000.0,
                 CONF_DEFAULT_MIN_POWER_CONSUMPTION: 0.0,
             }
 
@@ -869,7 +869,7 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         data_schema[vol.Optional(CONF_MIN_WATER_CONSUMPTION, default=float(config_data.get(CONF_DEFAULT_MIN_WATER_CONSUMPTION, 0.1)))] = cv.positive_float
         data_schema[vol.Optional(CONF_MAX_FERTILIZER_CONSUMPTION, default=int(config_data.get(CONF_DEFAULT_MAX_FERTILIZER_CONSUMPTION, 2000)))] = int
         data_schema[vol.Optional(CONF_MIN_FERTILIZER_CONSUMPTION, default=int(config_data.get(CONF_DEFAULT_MIN_FERTILIZER_CONSUMPTION, 500)))] = int
-        data_schema[vol.Optional(CONF_MAX_POWER_CONSUMPTION, default=float(config_data.get(CONF_DEFAULT_MAX_POWER_CONSUMPTION, 10.0)))] = cv.positive_float
+        data_schema[vol.Optional(CONF_MAX_POWER_CONSUMPTION, default=float(config_data.get(CONF_DEFAULT_MAX_POWER_CONSUMPTION, 1000.0)))] = cv.positive_float
         data_schema[vol.Optional(CONF_MIN_POWER_CONSUMPTION, default=float(config_data.get(CONF_DEFAULT_MIN_POWER_CONSUMPTION, 0.0)))] = cv.positive_float
         data_schema[vol.Optional(CONF_MAX_PH, default=float(config_data.get(CONF_DEFAULT_MAX_PH, 7.5)))] = cv.positive_float
         data_schema[vol.Optional(CONF_MIN_PH, default=float(config_data.get(CONF_DEFAULT_MIN_PH, 5.5)))] = cv.positive_float
@@ -1202,7 +1202,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 ): int,
                 vol.Optional(
                     CONF_DEFAULT_MAX_POWER_CONSUMPTION,
-                    default=self.entry.data[FLOW_PLANT_INFO].get(CONF_DEFAULT_MAX_POWER_CONSUMPTION, 10.0)
+                    default=self.entry.data[FLOW_PLANT_INFO].get(CONF_DEFAULT_MAX_POWER_CONSUMPTION, 1000.0)
                 ): cv.positive_float,
                 vol.Optional(
                     CONF_DEFAULT_MIN_POWER_CONSUMPTION,

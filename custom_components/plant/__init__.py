@@ -9,6 +9,7 @@ from datetime import datetime
 import voluptuous as vol
 
 from homeassistant.components import websocket_api
+from homeassistant.components.logbook import log_entry
 from homeassistant.components.utility_meter.const import (
     DATA_TARIFF_SENSORS,
     DATA_UTILITY,
@@ -31,8 +32,10 @@ from homeassistant.helpers import (
     device_registry as dr,
     entity_registry as er,
 )
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import Entity, async_generate_entity_id
 from homeassistant.helpers.entity_component import EntityComponent
+from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.event import async_call_later
 
@@ -49,6 +52,7 @@ from .const import (
     ATTR_MOISTURE,
     ATTR_PLANT,
     ATTR_POWER_CONSUMPTION,
+    ATTR_PROBLEMS,
     ATTR_SENSOR,
     ATTR_SENSORS,
     ATTR_STRAIN,
@@ -82,6 +86,8 @@ from .const import (
     READING_MOISTURE,
     READING_TEMPERATURE,
     READING_POWER_CONSUMPTION,
+    HYSTERESIS_FRACTION,
+    RESTORE_GRACE_PERIOD,
     STATE_HIGH,
     STATE_LOW,
     ATTR_FLOWERING_DURATION,
@@ -215,10 +221,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Add the rest of the entities to device registry together with plant
     device_id = plant.device_id
-    await _plant_add_to_device_registry(hass, plant_entities, device_id)
-    await _plant_add_to_device_registry(hass, plant.integral_entities, device_id)
-    await _plant_add_to_device_registry(hass, plant.threshold_entities, device_id)
-    await _plant_add_to_device_registry(hass, plant.meter_entities, device_id)
+    await _plant_add_to_device_registry(hass, plant_entities, device_id, entry.entry_id)
+    await _plant_add_to_device_registry(hass, plant.integral_entities, device_id, entry.entry_id)
+    await _plant_add_to_device_registry(hass, plant.threshold_entities, device_id, entry.entry_id)
+    await _plant_add_to_device_registry(hass, plant.meter_entities, device_id, entry.entry_id)
 
     #
     # Set up utility sensor
@@ -274,7 +280,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def _plant_add_to_device_registry(
-    hass: HomeAssistant, plant_entities: list[Entity], device_id: str
+    hass: HomeAssistant, plant_entities: list[Entity], device_id: str, config_entry_id: str
 ) -> None:
     """Add all related entities to the correct device_id"""
 
@@ -283,7 +289,17 @@ async def _plant_add_to_device_registry(
     erreg = er.async_get(hass)
     for entity in plant_entities:
         if entity is not None and hasattr(entity, 'registry_entry') and entity.registry_entry is not None:
-            erreg.async_update_entity(entity.registry_entry.entity_id, device_id=device_id)
+            # config_entry_id fehlt sonst v.a. bei der Haupt-Plant/Cycle-Entity,
+            # da die über eine bare EntityComponent statt den regulären
+            # Config-Entry-Platform-Mechanismus hinzugefügt wird. Ohne
+            # config_entry_id räumt HA sie beim Löschen des Eintrags nicht mit
+            # auf - sie bleibt als Karteileiche zurück und eine Neuanlage
+            # bekommt "_2" angehängt.
+            erreg.async_update_entity(
+                entity.registry_entry.entity_id,
+                device_id=device_id,
+                config_entry_id=config_entry_id,
+            )
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -670,9 +686,9 @@ async def ws_set_main_image(
     download_path = config_entry.data[FLOW_PLANT_INFO].get(FLOW_DOWNLOAD_PATH, DEFAULT_IMAGE_PATH) if config_entry else DEFAULT_IMAGE_PATH
 
     try:
-        # Prüfe ob das Bild existiert
+        # Prüfe ob das Bild existiert — im Executor, kein Block auf den Loop.
         filepath = os.path.join(download_path, filename)
-        if not os.path.exists(filepath):
+        if not await hass.async_add_executor_job(os.path.exists, filepath):
             connection.send_error(msg["id"], "file_not_found", f"Image {filename} not found")
             return
 
@@ -698,7 +714,7 @@ async def ws_set_main_image(
         connection.send_error(msg["id"], "set_main_image_failed", str(e))
 
 
-class PlantDevice(Entity):
+class PlantDevice(RestoreEntity):
     """Base device for plants"""
 
     def __init__(self, hass: HomeAssistant, config: ConfigEntry) -> None:
@@ -738,6 +754,13 @@ class PlantDevice(Entity):
         )
 
         self.plant_complete = False
+        self._problems: list[dict] = []
+        # Problem sensor_types already written to the logbook, used to
+        # de-duplicate onset/recovery entries across update() runs.
+        self._logged_problem_types: set[str] = set()
+        self._restored_state_active = (
+            False  # True while showing restored startup values
+        )
         self._device_id = None
 
         self._check_days = None
@@ -847,6 +870,9 @@ class PlantDevice(Entity):
         # Neue Property für water_capacity
         self.water_capacity = None
 
+        # Neue Property für lux_to_ppfd
+        self.lux_to_ppfd = None
+
         # Hole den kWh Preis aus dem Konfigurationsknoten
         self._kwh_price = DEFAULT_KWH_PRICE
         for entry in hass.config_entries.async_entries(DOMAIN):
@@ -891,36 +917,23 @@ class PlantDevice(Entity):
         return self._device_id
 
     @property
-    def device_info(self) -> dict:
+    def device_info(self) -> DeviceInfo:
         """Return device info."""
-        device_type = self.device_type
-        
-        # Basis device_info
-        info = {
-            "identifiers": {(DOMAIN, self.unique_id)},
-            "name": self.name,
-            "serial_number": self._plant_id,
-        }
-        
-        # Spezifische Attribute je nach Device Type
-        if device_type == DEVICE_TYPE_PLANT:
-            info.update({
-                "manufacturer": self._plant_info.get(ATTR_BREEDER, "Unknown"),
-                "model": self._plant_info.get(ATTR_STRAIN, ""),
-                "model_id": self._plant_info.get(ATTR_TYPE, ""),
-            })
+        if self.device_type == DEVICE_TYPE_PLANT:
+            manufacturer = self._plant_info.get(ATTR_BREEDER, "Unknown")
+            model = self._plant_info.get(ATTR_STRAIN, "")
         else:  # DEVICE_TYPE_CYCLE
-            info.update({
-                "manufacturer": "Home Assistant",
-                "model": "Cycle",
-                "model_id": self._plant_info.get(ATTR_TYPE, ""),
-            })
-        
-        # Optional website hinzufügen wenn vorhanden
-        if self.website:
-            info["configuration_url"] = self.website
-        
-        return info
+            manufacturer = "Home Assistant"
+            model = "Cycle"
+        return DeviceInfo(
+            identifiers={(DOMAIN, self.unique_id)},
+            name=self.name,
+            serial_number=self._plant_id,
+            manufacturer=manufacturer,
+            model=model,
+            model_id=self._plant_info.get(ATTR_TYPE, ""),
+            configuration_url=self.website if self.website else None,
+        )
 
     @property
     def illuminance_trigger(self) -> bool:
@@ -965,7 +978,7 @@ class PlantDevice(Entity):
     @property
     def power_consumption_trigger(self) -> bool:
         """Return if power consumption should trigger problems."""
-        return self._config.data[FLOW_PLANT_INFO].get(FLOW_POWER_CONSUMPTION_TRIGGER, True)
+        return self._config.options.get(FLOW_POWER_CONSUMPTION_TRIGGER, True)
 
     @property
     def breeder(self) -> str:
@@ -1008,6 +1021,7 @@ class PlantDevice(Entity):
             "water_consumption_status": self.water_consumption_status,
             "fertilizer_consumption_status": self.fertilizer_consumption_status,
             "power_consumption_status": self.power_consumption_status,
+            ATTR_PROBLEMS: self._problems,
             "pid": self.pid,
             "type": self._plant_info.get(ATTR_TYPE, ""),
             "feminized": self._plant_info.get("feminized", ""),
@@ -1279,6 +1293,19 @@ class PlantDevice(Entity):
                 "type": "number"
             }
         
+        # Lux to PPFD Number
+        if self.lux_to_ppfd:
+            helpers["lux_to_ppfd"] = {
+                "entity_id": self.lux_to_ppfd.entity_id,
+                "current": self.lux_to_ppfd.state,
+                "icon": self.lux_to_ppfd.icon,
+                "unit_of_measurement": self.lux_to_ppfd.native_unit_of_measurement,
+                "min": self.lux_to_ppfd.native_min_value,
+                "max": self.lux_to_ppfd.native_max_value,
+                "step": self.lux_to_ppfd.native_step,
+                "type": "number"
+            }
+
         # Treatment Select
         if self.treatment_select:
             helpers["treatment"] = {
@@ -1480,10 +1507,111 @@ class PlantDevice(Entity):
         """Füge die Blütedauer Number Entity hinzu."""
         self.flowering_duration = flowering_duration
 
+    def _check_threshold(self, value, min_entity, max_entity, current_status):
+        """Check a value against min/max thresholds with hysteresis.
+
+        Returns STATE_LOW, STATE_HIGH, or STATE_OK.
+        When already in a problem state, require the value to cross back
+        by a margin (hysteresis band) before clearing, so a reading
+        oscillating right at the threshold doesn't flap ok/problem.
+        """
+        min_val = float(min_entity.state)
+        max_val = float(max_entity.state)
+
+        # Band is relative to the threshold being crossed, not the full
+        # (max - min) span, so a wide-range sensor with a small minimum
+        # doesn't get an over-inflated low-side margin.
+        span_band = (max_val - min_val) * HYSTERESIS_FRACTION
+        band_low = min(abs(min_val) * HYSTERESIS_FRACTION, span_band)
+        band_high = min(abs(max_val) * HYSTERESIS_FRACTION, span_band)
+
+        if value < min_val:
+            return STATE_LOW
+        if value > max_val:
+            return STATE_HIGH
+        if current_status == STATE_LOW and value <= min_val + band_low:
+            return STATE_LOW
+        if current_status == STATE_HIGH and value >= max_val - band_high:
+            return STATE_HIGH
+        return STATE_OK
+
+    def _log_problem_changes(self, problem_sensors: dict[str, tuple]) -> None:
+        """Build self._problems from triggered sensors and log new/resolved problems to the HA logbook.
+
+        Writes to the activity feed when a problem first appears or clears, but stays
+        silent when the same problems persist across updates (avoids repeated entries).
+        problem_sensors maps sensor_type -> (current_val, status, min_entity, max_entity).
+        """
+
+        def _threshold_str(threshold_entity) -> str:
+            raw = threshold_entity.state
+            try:
+                float(raw)
+            except (ValueError, TypeError):
+                return "unknown"
+            return str(raw)
+
+        self._problems = [
+            {
+                "sensor_type": st,
+                "status": info[1],
+                "current": str(info[0]),
+                "min": _threshold_str(info[2]),
+                "max": _threshold_str(info[3]),
+            }
+            for st, info in problem_sensors.items()
+        ]
+
+        new_problem_types = set(problem_sensors.keys())
+        appeared = new_problem_types - self._logged_problem_types
+        resolved = self._logged_problem_types - new_problem_types
+
+        # Log each newly appeared problem — one logbook entry per sensor per onset,
+        # e.g. "moisture low — current: 15, min: 20"
+        for p in self._problems:
+            if p["sensor_type"] in appeared:
+                threshold_label = "min" if p["status"] == STATE_LOW else "max"
+                threshold_value = p["min"] if p["status"] == STATE_LOW else p["max"]
+                log_entry(
+                    self.hass,
+                    self.name,
+                    f"{p['sensor_type'].replace('_', ' ')} {p['status'].lower()}"
+                    f" — current: {p['current']}, {threshold_label}: {threshold_value}",
+                    domain=DOMAIN,
+                    entity_id=self.entity_id,
+                )
+
+        # Log each resolved problem — one logbook entry per sensor per recovery,
+        # e.g. "moisture back in range"
+        for sensor_type in resolved:
+            log_entry(
+                self.hass,
+                self.name,
+                f"{sensor_type.replace('_', ' ')} back in range",
+                domain=DOMAIN,
+                entity_id=self.entity_id,
+            )
+
+        self._logged_problem_types = new_problem_types
+
     def update(self) -> None:
         """Run on every update of the entities"""
+
+        # Startup restore window: until a source delivers live data, keep the
+        # values restored in async_added_to_hass instead of recomputing them
+        # to UNKNOWN/None. Must sit above the per-sensor logic below -- that
+        # logic overwrites each *_status as it runs, so a guard further down
+        # would be too late.
+        if self._restored_state_active:
+            if not self._has_live_source_data():
+                return
+            self._restored_state_active = False  # first live reading -> resume normal
+
         new_state = STATE_OK
         known_state = False
+        # Collects one compact tuple per triggered sensor: (current_val, status, min_entity, max_entity).
+        # Converted to self._problems / logbook entries at the end of update() via _log_problem_changes.
+        _problem_sensors: dict[str, tuple] = {}
 
         if self.device_type == DEVICE_TYPE_CYCLE:
             # Cycle-Update-Logik
@@ -1491,139 +1619,130 @@ class PlantDevice(Entity):
                 temperature = self._median_sensors.get('temperature')
                 if temperature is not None:
                     known_state = True
-                    if float(temperature) < float(self.min_temperature.state):
-                        self.temperature_status = STATE_LOW
-                        if self.temperature_trigger:
-                            new_state = STATE_PROBLEM
-                    elif float(temperature) > float(self.max_temperature.state):
-                        self.temperature_status = STATE_HIGH
-                        if self.temperature_trigger:
-                            new_state = STATE_PROBLEM
-                    else:
-                        self.temperature_status = STATE_OK
+                    temperature = float(temperature)
+                    self.temperature_status = self._check_threshold(
+                        temperature, self.min_temperature, self.max_temperature, self.temperature_status
+                    )
+                    if self.temperature_status != STATE_OK and self.temperature_trigger:
+                        new_state = STATE_PROBLEM
+                        _problem_sensors["temperature"] = (
+                            temperature, self.temperature_status, self.min_temperature, self.max_temperature
+                        )
 
             if self.sensor_moisture is not None:
                 moisture = self._median_sensors.get('moisture')
                 if moisture is not None:
                     known_state = True
-                    if float(moisture) < float(self.min_moisture.state):
-                        self.moisture_status = STATE_LOW
-                        if self.moisture_trigger:
-                            new_state = STATE_PROBLEM
-                    elif float(moisture) > float(self.max_moisture.state):
-                        self.moisture_status = STATE_HIGH
-                        if self.moisture_trigger:
-                            new_state = STATE_PROBLEM
-                    else:
-                        self.moisture_status = STATE_OK
+                    moisture = float(moisture)
+                    self.moisture_status = self._check_threshold(
+                        moisture, self.min_moisture, self.max_moisture, self.moisture_status
+                    )
+                    if self.moisture_status != STATE_OK and self.moisture_trigger:
+                        new_state = STATE_PROBLEM
+                        _problem_sensors["moisture"] = (
+                            moisture, self.moisture_status, self.min_moisture, self.max_moisture
+                        )
 
             if self.sensor_conductivity is not None:
                 conductivity = self._median_sensors.get('conductivity')
                 if conductivity is not None:
                     known_state = True
-                    if float(conductivity) < float(self.min_conductivity.state):
-                        self.conductivity_status = STATE_LOW
-                        if self.conductivity_trigger:
-                            new_state = STATE_PROBLEM
-                    elif float(conductivity) > float(self.max_conductivity.state):
-                        self.conductivity_status = STATE_HIGH
-                        if self.conductivity_trigger:
-                            new_state = STATE_PROBLEM
-                    else:
-                        self.conductivity_status = STATE_OK
+                    conductivity = float(conductivity)
+                    self.conductivity_status = self._check_threshold(
+                        conductivity, self.min_conductivity, self.max_conductivity, self.conductivity_status
+                    )
+                    if self.conductivity_status != STATE_OK and self.conductivity_trigger:
+                        new_state = STATE_PROBLEM
+                        _problem_sensors["conductivity"] = (
+                            conductivity, self.conductivity_status, self.min_conductivity, self.max_conductivity
+                        )
 
             if self.sensor_illuminance is not None:
                 illuminance = self._median_sensors.get('illuminance')
                 if illuminance is not None:
                     known_state = True
-                    if float(illuminance) < float(self.min_illuminance.state):
-                        self.illuminance_status = STATE_LOW
-                        if self.illuminance_trigger:
-                            new_state = STATE_PROBLEM
-                    elif float(illuminance) > float(self.max_illuminance.state):
-                        self.illuminance_status = STATE_HIGH
-                        if self.illuminance_trigger:
-                            new_state = STATE_PROBLEM
-                    else:
-                        self.illuminance_status = STATE_OK
+                    illuminance = float(illuminance)
+                    self.illuminance_status = self._check_threshold(
+                        illuminance, self.min_illuminance, self.max_illuminance, self.illuminance_status
+                    )
+                    if self.illuminance_status != STATE_OK and self.illuminance_trigger:
+                        new_state = STATE_PROBLEM
+                        _problem_sensors["illuminance"] = (
+                            illuminance, self.illuminance_status, self.min_illuminance, self.max_illuminance
+                        )
 
             if self.sensor_humidity is not None:
                 humidity = self._median_sensors.get('humidity')
                 if humidity is not None:
                     known_state = True
-                    if float(humidity) < float(self.min_humidity.state):
-                        self.humidity_status = STATE_LOW
-                        if self.humidity_trigger:
-                            new_state = STATE_PROBLEM
-                    elif float(humidity) > float(self.max_humidity.state):
-                        self.humidity_status = STATE_HIGH
-                        if self.humidity_trigger:
-                            new_state = STATE_PROBLEM
-                    else:
-                        self.humidity_status = STATE_OK
+                    humidity = float(humidity)
+                    self.humidity_status = self._check_threshold(
+                        humidity, self.min_humidity, self.max_humidity, self.humidity_status
+                    )
+                    if self.humidity_status != STATE_OK and self.humidity_trigger:
+                        new_state = STATE_PROBLEM
+                        _problem_sensors["humidity"] = (
+                            humidity, self.humidity_status, self.min_humidity, self.max_humidity
+                        )
 
             if self.dli is not None:
                 dli = self._median_sensors.get('dli')
                 if dli is not None:
                     known_state = True
-                    if float(dli) < float(self.min_dli.state):
-                        self.dli_status = STATE_LOW
-                        if self.dli_trigger:
-                            new_state = STATE_PROBLEM
-                    elif float(dli) > float(self.max_dli.state):
-                        self.dli_status = STATE_HIGH
-                        if self.dli_trigger:
-                            new_state = STATE_PROBLEM
-                    else:
-                        self.dli_status = STATE_OK
+                    dli = float(dli)
+                    self.dli_status = self._check_threshold(
+                        dli, self.min_dli, self.max_dli, self.dli_status
+                    )
+                    if self.dli_status != STATE_OK and self.dli_trigger:
+                        new_state = STATE_PROBLEM
+                        _problem_sensors["dli"] = (
+                            dli, self.dli_status, self.min_dli, self.max_dli
+                        )
 
             # Überprüfe Wasser-Verbrauch
             if self.moisture_consumption is not None:
                 water_consumption = self.moisture_consumption.state
                 if water_consumption is not None and water_consumption != STATE_UNAVAILABLE and water_consumption != STATE_UNKNOWN:
                     known_state = True
-                    if float(water_consumption) < float(self.min_water_consumption.state):
-                        self.water_consumption_status = STATE_LOW
-                        if self.water_consumption_trigger:
-                            new_state = STATE_PROBLEM
-                    elif float(water_consumption) > float(self.max_water_consumption.state):
-                        self.water_consumption_status = STATE_HIGH
-                        if self.water_consumption_trigger:
-                            new_state = STATE_PROBLEM
-                    else:
-                        self.water_consumption_status = STATE_OK
+                    water_consumption = float(water_consumption)
+                    self.water_consumption_status = self._check_threshold(
+                        water_consumption, self.min_water_consumption, self.max_water_consumption, self.water_consumption_status
+                    )
+                    if self.water_consumption_status != STATE_OK and self.water_consumption_trigger:
+                        new_state = STATE_PROBLEM
+                        _problem_sensors["water_consumption"] = (
+                            water_consumption, self.water_consumption_status, self.min_water_consumption, self.max_water_consumption
+                        )
 
             # Überprüfe Dünger-Verbrauch
             if self.fertilizer_consumption is not None:
                 fertilizer_consumption = self.fertilizer_consumption.state
                 if fertilizer_consumption is not None and fertilizer_consumption != STATE_UNAVAILABLE and fertilizer_consumption != STATE_UNKNOWN:
                     known_state = True
-                    if float(fertilizer_consumption) < float(self.min_fertilizer_consumption.state):
-                        self.fertilizer_consumption_status = STATE_LOW
-                        if self.fertilizer_consumption_trigger:
-                            new_state = STATE_PROBLEM
-                    elif float(fertilizer_consumption) > float(self.max_fertilizer_consumption.state):
-                        self.fertilizer_consumption_status = STATE_HIGH
-                        if self.fertilizer_consumption_trigger:
-                            new_state = STATE_PROBLEM
-                    else:
-                        self.fertilizer_consumption_status = STATE_OK
+                    fertilizer_consumption = float(fertilizer_consumption)
+                    self.fertilizer_consumption_status = self._check_threshold(
+                        fertilizer_consumption, self.min_fertilizer_consumption, self.max_fertilizer_consumption, self.fertilizer_consumption_status
+                    )
+                    if self.fertilizer_consumption_status != STATE_OK and self.fertilizer_consumption_trigger:
+                        new_state = STATE_PROBLEM
+                        _problem_sensors["fertilizer_consumption"] = (
+                            fertilizer_consumption, self.fertilizer_consumption_status, self.min_fertilizer_consumption, self.max_fertilizer_consumption
+                        )
 
             # Überprüfe Power Consumption
             if self.sensor_power_consumption is not None:
                 power_consumption = self.sensor_power_consumption.state
                 if power_consumption is not None and power_consumption != STATE_UNAVAILABLE and power_consumption != STATE_UNKNOWN:
                     known_state = True
-                    if float(power_consumption) < float(self.min_power_consumption.state):
-                        self.power_consumption_status = STATE_LOW
-                        if self.power_consumption_trigger:
-                            new_state = STATE_PROBLEM
-                    elif float(power_consumption) > float(self.max_power_consumption.state):
-                        self.power_consumption_status = STATE_HIGH
-                        if self.power_consumption_trigger:
-                            new_state = STATE_PROBLEM
-                    else:
-                        self.power_consumption_status = STATE_OK
+                    power_consumption = float(power_consumption)
+                    self.power_consumption_status = self._check_threshold(
+                        power_consumption, self.min_power_consumption, self.max_power_consumption, self.power_consumption_status
+                    )
+                    if self.power_consumption_status != STATE_OK and self.power_consumption_trigger:
+                        new_state = STATE_PROBLEM
+                        _problem_sensors["power_consumption"] = (
+                            power_consumption, self.power_consumption_status, self.min_power_consumption, self.max_power_consumption
+                        )
 
         else:
             # Plant-Update-Logik
@@ -1631,145 +1750,143 @@ class PlantDevice(Entity):
                 moisture = self.sensor_moisture.state
                 if moisture is not None and moisture != STATE_UNAVAILABLE and moisture != STATE_UNKNOWN:
                     known_state = True
-                    if float(moisture) < float(self.min_moisture.state):
-                        self.moisture_status = STATE_LOW
-                        if self.moisture_trigger:
-                            new_state = STATE_PROBLEM
-                    elif float(moisture) > float(self.max_moisture.state):
-                        self.moisture_status = STATE_HIGH
-                        if self.moisture_trigger:
-                            new_state = STATE_PROBLEM
-                    else:
-                        self.moisture_status = STATE_OK
+                    moisture = float(moisture)
+                    self.moisture_status = self._check_threshold(
+                        moisture, self.min_moisture, self.max_moisture, self.moisture_status
+                    )
+                    if self.moisture_status != STATE_OK and self.moisture_trigger:
+                        new_state = STATE_PROBLEM
+                        _problem_sensors["moisture"] = (
+                            moisture, self.moisture_status, self.min_moisture, self.max_moisture
+                        )
 
             if self.sensor_conductivity is not None:
                 conductivity = self.sensor_conductivity.state
                 if conductivity is not None and conductivity != STATE_UNAVAILABLE and conductivity != STATE_UNKNOWN:
                     known_state = True
-                    if float(conductivity) < float(self.min_conductivity.state):
-                        self.conductivity_status = STATE_LOW
-                        if self.conductivity_trigger:
-                            new_state = STATE_PROBLEM
-                    elif float(conductivity) > float(self.max_conductivity.state):
-                        self.conductivity_status = STATE_HIGH
-                        if self.conductivity_trigger:
-                            new_state = STATE_PROBLEM
-                    else:
-                        self.conductivity_status = STATE_OK
+                    conductivity = float(conductivity)
+                    self.conductivity_status = self._check_threshold(
+                        conductivity, self.min_conductivity, self.max_conductivity, self.conductivity_status
+                    )
+                    if self.conductivity_status != STATE_OK and self.conductivity_trigger:
+                        new_state = STATE_PROBLEM
+                        _problem_sensors["conductivity"] = (
+                            conductivity, self.conductivity_status, self.min_conductivity, self.max_conductivity
+                        )
 
             # Füge die fehlenden Sensor-Prüfungen hinzu
             if self.sensor_temperature is not None:
                 temperature = self.sensor_temperature.state
                 if temperature is not None and temperature != STATE_UNAVAILABLE and temperature != STATE_UNKNOWN:
                     known_state = True
-                    if float(temperature) < float(self.min_temperature.state):
-                        self.temperature_status = STATE_LOW
-                        if self.temperature_trigger:
-                            new_state = STATE_PROBLEM
-                    elif float(temperature) > float(self.max_temperature.state):
-                        self.temperature_status = STATE_HIGH
-                        if self.temperature_trigger:
-                            new_state = STATE_PROBLEM
-                    else:
-                        self.temperature_status = STATE_OK
+                    temperature = float(temperature)
+                    self.temperature_status = self._check_threshold(
+                        temperature, self.min_temperature, self.max_temperature, self.temperature_status
+                    )
+                    if self.temperature_status != STATE_OK and self.temperature_trigger:
+                        new_state = STATE_PROBLEM
+                        _problem_sensors["temperature"] = (
+                            temperature, self.temperature_status, self.min_temperature, self.max_temperature
+                        )
 
             if self.sensor_illuminance is not None:
                 illuminance = self.sensor_illuminance.state
                 if illuminance is not None and illuminance != STATE_UNAVAILABLE and illuminance != STATE_UNKNOWN:
                     known_state = True
-                    if float(illuminance) < float(self.min_illuminance.state):
-                        self.illuminance_status = STATE_LOW
-                        if self.illuminance_trigger:
-                            new_state = STATE_PROBLEM
-                    elif float(illuminance) > float(self.max_illuminance.state):
-                        self.illuminance_status = STATE_HIGH
-                        if self.illuminance_trigger:
-                            new_state = STATE_PROBLEM
-                    else:
-                        self.illuminance_status = STATE_OK
+                    illuminance = float(illuminance)
+                    self.illuminance_status = self._check_threshold(
+                        illuminance, self.min_illuminance, self.max_illuminance, self.illuminance_status
+                    )
+                    if self.illuminance_status != STATE_OK and self.illuminance_trigger:
+                        new_state = STATE_PROBLEM
+                        _problem_sensors["illuminance"] = (
+                            illuminance, self.illuminance_status, self.min_illuminance, self.max_illuminance
+                        )
 
             if self.sensor_humidity is not None:
                 humidity = self.sensor_humidity.state
                 if humidity is not None and humidity != STATE_UNAVAILABLE and humidity != STATE_UNKNOWN:
                     known_state = True
-                    if float(humidity) < float(self.min_humidity.state):
-                        self.humidity_status = STATE_LOW
-                        if self.humidity_trigger:
-                            new_state = STATE_PROBLEM
-                    elif float(humidity) > float(self.max_humidity.state):
-                        self.humidity_status = STATE_HIGH
-                        if self.humidity_trigger:
-                            new_state = STATE_PROBLEM
-                    else:
-                        self.humidity_status = STATE_OK
+                    humidity = float(humidity)
+                    self.humidity_status = self._check_threshold(
+                        humidity, self.min_humidity, self.max_humidity, self.humidity_status
+                    )
+                    if self.humidity_status != STATE_OK and self.humidity_trigger:
+                        new_state = STATE_PROBLEM
+                        _problem_sensors["humidity"] = (
+                            humidity, self.humidity_status, self.min_humidity, self.max_humidity
+                        )
 
             if self.dli is not None:
                 dli = self.dli.state
                 if dli is not None and dli != STATE_UNAVAILABLE and dli != STATE_UNKNOWN:
                     known_state = True
-                    if float(dli) < float(self.min_dli.state):
-                        self.dli_status = STATE_LOW
-                        if self.dli_trigger:
-                            new_state = STATE_PROBLEM
-                    elif float(dli) > float(self.max_dli.state):
-                        self.dli_status = STATE_HIGH
-                        if self.dli_trigger:
-                            new_state = STATE_PROBLEM
-                    else:
-                        self.dli_status = STATE_OK
+                    dli = float(dli)
+                    self.dli_status = self._check_threshold(
+                        dli, self.min_dli, self.max_dli, self.dli_status
+                    )
+                    if self.dli_status != STATE_OK and self.dli_trigger:
+                        new_state = STATE_PROBLEM
+                        _problem_sensors["dli"] = (
+                            dli, self.dli_status, self.min_dli, self.max_dli
+                        )
 
             # Überprüfe Wasser-Verbrauch
             if self.moisture_consumption is not None:
                 water_consumption = self.moisture_consumption.state
                 if water_consumption is not None and water_consumption != STATE_UNAVAILABLE and water_consumption != STATE_UNKNOWN:
                     known_state = True
-                    if float(water_consumption) < float(self.min_water_consumption.state):
-                        self.water_consumption_status = STATE_LOW
-                        if self.water_consumption_trigger:
-                            new_state = STATE_PROBLEM
-                    elif float(water_consumption) > float(self.max_water_consumption.state):
-                        self.water_consumption_status = STATE_HIGH
-                        if self.water_consumption_trigger:
-                            new_state = STATE_PROBLEM
-                    else:
-                        self.water_consumption_status = STATE_OK
+                    water_consumption = float(water_consumption)
+                    self.water_consumption_status = self._check_threshold(
+                        water_consumption, self.min_water_consumption, self.max_water_consumption, self.water_consumption_status
+                    )
+                    if self.water_consumption_status != STATE_OK and self.water_consumption_trigger:
+                        new_state = STATE_PROBLEM
+                        _problem_sensors["water_consumption"] = (
+                            water_consumption, self.water_consumption_status, self.min_water_consumption, self.max_water_consumption
+                        )
 
             # Überprüfe Dünger-Verbrauch
             if self.fertilizer_consumption is not None:
                 fertilizer_consumption = self.fertilizer_consumption.state
                 if fertilizer_consumption is not None and fertilizer_consumption != STATE_UNAVAILABLE and fertilizer_consumption != STATE_UNKNOWN:
                     known_state = True
-                    if float(fertilizer_consumption) < float(self.min_fertilizer_consumption.state):
-                        self.fertilizer_consumption_status = STATE_LOW
-                        if self.fertilizer_consumption_trigger:
-                            new_state = STATE_PROBLEM
-                    elif float(fertilizer_consumption) > float(self.max_fertilizer_consumption.state):
-                        self.fertilizer_consumption_status = STATE_HIGH
-                        if self.fertilizer_consumption_trigger:
-                            new_state = STATE_PROBLEM
-                    else:
-                        self.fertilizer_consumption_status = STATE_OK
+                    fertilizer_consumption = float(fertilizer_consumption)
+                    self.fertilizer_consumption_status = self._check_threshold(
+                        fertilizer_consumption, self.min_fertilizer_consumption, self.max_fertilizer_consumption, self.fertilizer_consumption_status
+                    )
+                    if self.fertilizer_consumption_status != STATE_OK and self.fertilizer_consumption_trigger:
+                        new_state = STATE_PROBLEM
+                        _problem_sensors["fertilizer_consumption"] = (
+                            fertilizer_consumption, self.fertilizer_consumption_status, self.min_fertilizer_consumption, self.max_fertilizer_consumption
+                        )
 
             # Überprüfe Power Consumption
             if self.sensor_power_consumption is not None:
                 power_consumption = self.sensor_power_consumption.state
                 if power_consumption is not None and power_consumption != STATE_UNAVAILABLE and power_consumption != STATE_UNKNOWN:
                     known_state = True
-                    if float(power_consumption) < float(self.min_power_consumption.state):
-                        self.power_consumption_status = STATE_LOW
-                        if self.power_consumption_trigger:
-                            new_state = STATE_PROBLEM
-                    elif float(power_consumption) > float(self.max_power_consumption.state):
-                        self.power_consumption_status = STATE_HIGH
-                        if self.power_consumption_trigger:
-                            new_state = STATE_PROBLEM
-                    else:
-                        self.power_consumption_status = STATE_OK
+                    power_consumption = float(power_consumption)
+                    self.power_consumption_status = self._check_threshold(
+                        power_consumption, self.min_power_consumption, self.max_power_consumption, self.power_consumption_status
+                    )
+                    if self.power_consumption_status != STATE_OK and self.power_consumption_trigger:
+                        new_state = STATE_PROBLEM
+                        _problem_sensors["power_consumption"] = (
+                            power_consumption, self.power_consumption_status, self.min_power_consumption, self.max_power_consumption
+                        )
 
         if not known_state:
             new_state = STATE_UNKNOWN
 
         self._attr_state = new_state
+
+        # Reconcile problems / write logbook entries only when we have live data.
+        # Skipping when known_state is False avoids treating a sensor dropout as
+        # every active problem resolving (which would emit false "back in range").
+        if known_state:
+            self._log_problem_changes(_problem_sensors)
+
         self.update_registry()
 
     @property
@@ -1789,8 +1906,81 @@ class PlantDevice(Entity):
 
     async def async_added_to_hass(self) -> None:
         """When entity is added to hass."""
+        await super().async_added_to_hass()
         self.update_registry()
         # Die Wiederherstellung der Member Plants erfolgt jetzt direkt in der PlantGrowthPhaseSelect Klasse
+
+        if last_state := await self.async_get_last_state():
+            if last_state.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE):
+                self._attr_state = last_state.state
+                self._restored_state_active = True  # only latch on a real restore
+
+            attrs = last_state.attributes
+            for field in (
+                "moisture",
+                "temperature",
+                "conductivity",
+                "illuminance",
+                "humidity",
+                "dli",
+                "water_consumption",
+                "fertilizer_consumption",
+                "power_consumption",
+            ):
+                setattr(self, f"{field}_status", attrs.get(f"{field}_status"))
+
+            # Restore the active problems and which problem types were already
+            # logged, so they survive the restore window and active problems are
+            # not re-logged as new onsets after a restart / reload.
+            restored_problems = attrs.get(ATTR_PROBLEMS)
+            if isinstance(restored_problems, list) and restored_problems:
+                self._problems = list(restored_problems)
+                self._logged_problem_types = {
+                    problem["sensor_type"]
+                    for problem in restored_problems
+                    if isinstance(problem, dict) and problem.get("sensor_type")
+                }
+
+        # Bound the startup restore window: if no source ever delivers live
+        # data, end the window after the grace period so the restored plant
+        # state is not held indefinitely.
+        if self._restored_state_active:
+            self.async_on_remove(
+                async_call_later(
+                    self.hass, RESTORE_GRACE_PERIOD, self._end_restore_window
+                )
+            )
+
+    @callback
+    def _end_restore_window(self, _now=None) -> None:
+        """End the startup restore window once the grace period elapses."""
+        if not self._restored_state_active:
+            return
+        _LOGGER.debug(
+            "Restore grace period elapsed for %s; resuming live state",
+            self.entity_id,
+        )
+        self._restored_state_active = False
+        self.async_schedule_update_ha_state(True)
+
+    def _has_live_source_data(self) -> bool:
+        """True once at least one upstream source sensor reports a live value."""
+        if self.device_type == DEVICE_TYPE_CYCLE:
+            return bool(self._median_sensors)
+
+        for sensor in (
+            self.sensor_moisture,
+            self.sensor_temperature,
+            self.sensor_conductivity,
+            self.sensor_illuminance,
+            self.sensor_humidity,
+        ):
+            if sensor is None:
+                continue
+            state = sensor.state
+            if state is not None and state != STATE_UNAVAILABLE and state != STATE_UNKNOWN:
+                return True
+        return False
 
     @property
     def icon(self) -> str:
@@ -2080,6 +2270,10 @@ class PlantDevice(Entity):
     def add_water_capacity(self, water_capacity) -> None:
         """Add water capacity entity."""
         self.water_capacity = water_capacity
+
+    def add_lux_to_ppfd(self, lux_to_ppfd) -> None:
+        """Add lux to PPFD conversion factor entity."""
+        self.lux_to_ppfd = lux_to_ppfd
 
     def add_treatment_select(self, treatment_select: Entity) -> None:
         """Add the treatment select entity."""

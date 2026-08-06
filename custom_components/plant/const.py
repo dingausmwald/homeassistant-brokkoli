@@ -1,5 +1,7 @@
 """Constants"""
 
+from datetime import timedelta
+
 from homeassistant.const import ATTR_ICON
 
 DOMAIN = "plant"
@@ -30,6 +32,7 @@ DEVICE_CLASS_PH = "ph"  # Eigene Device Class für pH
 
 ATTR_TEMPERATURE = "temperature"
 ATTR_PROBLEM = "problem"
+ATTR_PROBLEMS = "problems"
 ATTR_SENSORS = "sensors"
 ATTR_SENSOR = "sensor"
 ATTR_METERS = "meters"
@@ -89,8 +92,8 @@ DEFAULT_MIN_WATER_CONSUMPTION = 0.1
 DEFAULT_MAX_WATER_CONSUMPTION = 2.0
 DEFAULT_MIN_FERTILIZER_CONSUMPTION = 0.1
 DEFAULT_MAX_FERTILIZER_CONSUMPTION = 2.0
-DEFAULT_MIN_POWER_CONSUMPTION = 0.1
-DEFAULT_MAX_POWER_CONSUMPTION = 5.0
+DEFAULT_MIN_POWER_CONSUMPTION = 0
+DEFAULT_MAX_POWER_CONSUMPTION = 1000
 
 # pH Defaults
 DEFAULT_MIN_PH = 5.5
@@ -110,6 +113,10 @@ UNIT_MICRO_PPFD = "μmol/s⋅m²"
 UNIT_DLI = "mol/d⋅m²"
 UNIT_MICRO_DLI = "μmol/d⋅m²"
 UNIT_CONDUCTIVITY = "μS/cm"
+# Fertilizer-Consumption (live + total) wird in mS/cm geführt, weil der
+# akkumulierte Wert sonst schnell 5-6-stellige µS-Zahlen erreicht.
+# 1 mS/cm = 1 EC. Live-Conductivity-Sensor bleibt in µS/cm.
+UNIT_CONDUCTIVITY_MILLI = "mS/cm"
 UNIT_VOLUME = "L"
 
 FLOW_WRONG_PLANT = "wrong_plant"
@@ -179,6 +186,21 @@ STATE_LOW = "Low"
 STATE_HIGH = "High"
 STATE_DLI_LOW = "Previous DLI Low"
 STATE_DLI_HIGH = "Previous DLI High"
+
+# How long, after startup, restored entity values are held while the source
+# sensor has not yet delivered a live reading. Bounds the restore window so a
+# source that never recovers (e.g. a dead sensor) stops masking a stale value.
+# Sized well above typical BLE broadcast gaps: gives ample margin while still
+# failing over to the real (unavailable) state promptly for a genuinely dead
+# sensor.
+RESTORE_GRACE_PERIOD = timedelta(minutes=10)
+
+# Hysteresis: fraction of the crossed threshold (min or max) that the value
+# must clear by before a problem state is removed. Prevents flapping when a
+# sensor value oscillates near a threshold. Relative to the threshold itself
+# (not the max-min span) so wide-range sensors with a small minimum don't get
+# an over-inflated low-side margin.
+HYSTERESIS_FRACTION = 0.05
 
 CONF_MIN_BATTERY_LEVEL = f"min_{ATTR_BATTERY}"
 CONF_MIN_TEMPERATURE = f"min_{ATTR_TEMPERATURE}"

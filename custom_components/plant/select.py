@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 import asyncio
 
 from homeassistant.components.select import SelectEntity
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
@@ -71,6 +72,9 @@ async def async_setup_entry(
 class PlantGrowthPhaseSelect(SelectEntity, RestoreEntity):
     """Representation of a plant growth phase selector."""
 
+    _attr_has_entity_name = True
+    _attr_translation_key = "growth_phase"
+
     # Mapping für Phasen zu Datums-Attributen
     date_mapping = {
         GROWTH_PHASE_SEEDS: "seeds_start",
@@ -101,7 +105,6 @@ class PlantGrowthPhaseSelect(SelectEntity, RestoreEntity):
         self._config = config
         self._hass = hass
         self._plant = plant_device
-        self._attr_name = f"{plant_device.name} Growth Phase"
         self._attr_unique_id = f"{config.entry_id}-growth-phase"
         
         # Ordinal Mapping für die Phasen (ohne REMOVED)
@@ -114,10 +117,10 @@ class PlantGrowthPhaseSelect(SelectEntity, RestoreEntity):
             GROWTH_PHASE_HARVESTED: 5
         }
         
-        # Initialize date and duration attributes
+        # Initialize date and duration attributes (kein friendly_name —
+        # HA-Pattern: name kommt aus has_entity_name + translation_key).
         current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self._attr_extra_state_attributes = {
-            "friendly_name": self._attr_name,
             # Date Attributes
             "seeds_start": None,
             "germination_start": None,
@@ -272,11 +275,9 @@ class PlantGrowthPhaseSelect(SelectEntity, RestoreEntity):
         return attrs
 
     @property
-    def device_info(self) -> dict:
+    def device_info(self) -> DeviceInfo:
         """Return device info."""
-        return {
-            "identifiers": {(DOMAIN, self._plant.unique_id)},
-        }
+        return DeviceInfo(identifiers={(DOMAIN, self._plant.unique_id)})
 
     def _calculate_phase_duration(self, old_phase: str, new_phase: str) -> None:
         """Berechne die Dauer der alten Phase und aktualisiere das Attribut."""
@@ -402,12 +403,14 @@ class PlantGrowthPhaseSelect(SelectEntity, RestoreEntity):
 class PlantCycleSelect(SelectEntity, RestoreEntity):
     """Select entity to assign a plant to a cycle."""
 
+    _attr_has_entity_name = True
+    _attr_translation_key = "cycle"
+
     def __init__(self, hass: HomeAssistant, config: ConfigEntry, plant_device) -> None:
         """Initialize the cycle select entity."""
         self._hass = hass
         self._config = config
         self._plant = plant_device
-        self._attr_name = f"{plant_device.name} Cycle"
         self._attr_unique_id = f"{config.entry_id}-cycle-select"
         self._attr_options = []
         self._cycle_mapping = {}
@@ -415,11 +418,9 @@ class PlantCycleSelect(SelectEntity, RestoreEntity):
         self._update_cycle_options()  # Initial update
 
     @property
-    def device_info(self) -> dict:
+    def device_info(self) -> DeviceInfo:
         """Return device info."""
-        return {
-            "identifiers": {(DOMAIN, self._plant.unique_id)},
-        }
+        return DeviceInfo(identifiers={(DOMAIN, self._plant.unique_id)})
 
     async def async_added_to_hass(self) -> None:
         """Handle entity which will be added."""
@@ -518,6 +519,9 @@ class PlantCycleSelect(SelectEntity, RestoreEntity):
 class PlantTreatmentSelect(SelectEntity, RestoreEntity):
     """Representation of a plant treatment selector."""
 
+    _attr_has_entity_name = True
+    _attr_translation_key = "treatment"
+
     def __init__(self, hass: HomeAssistant, config: ConfigEntry, plant_device) -> None:
         """Initialize the treatment select entity."""
         self._attr_options = [""] + TREATMENT_OPTIONS  # Leere Option am Anfang
@@ -525,20 +529,16 @@ class PlantTreatmentSelect(SelectEntity, RestoreEntity):
         self._config = config
         self._hass = hass
         self._plant = plant_device
-        self._attr_name = f"{plant_device.name} Treatment"
         self._attr_unique_id = f"{config.entry_id}-treatment"
-        
-        # Initialize basic attributes
-        self._attr_extra_state_attributes = {
-            "friendly_name": self._attr_name
-        }
+
+        # extra_state_attributes leer initialisieren — friendly_name kommt
+        # automatisch aus has_entity_name + translation_key.
+        self._attr_extra_state_attributes = {}
 
     @property
-    def device_info(self) -> dict:
+    def device_info(self) -> DeviceInfo:
         """Return device info."""
-        return {
-            "identifiers": {(DOMAIN, self._plant.unique_id)},
-        }
+        return DeviceInfo(identifiers={(DOMAIN, self._plant.unique_id)})
 
     async def async_added_to_hass(self) -> None:
         """Handle entity which will be added."""

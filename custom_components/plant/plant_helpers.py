@@ -192,8 +192,15 @@ class PlantHelper:
                 return ret
 
         # Basis-Attribute für beide Typen
+        # Emoji nur anhängen wenn er nicht schon im Namen steht — sonst gibt's
+        # bei der Verkettung (services.create_plant hängt ihn vorher schon an)
+        # ein Doppel-Emoji im Friendly-Name.
+        _emoji = config.get("plant_emoji", "")
+        _name = config[ATTR_NAME]
+        if _emoji and _emoji not in _name:
+            _name = f"{_name} {_emoji}"
         base_info = {
-            ATTR_NAME: config[ATTR_NAME] + (f" {config['plant_emoji']}" if "plant_emoji" in config else ""),
+            ATTR_NAME: _name,
             ATTR_STRAIN: config.get(ATTR_STRAIN, ""),
             ATTR_BREEDER: config.get(ATTR_BREEDER, ""),
             ATTR_POT_SIZE: config.get(ATTR_POT_SIZE, DEFAULT_POT_SIZE),

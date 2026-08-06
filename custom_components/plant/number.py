@@ -8,6 +8,7 @@ from homeassistant.components.number import (
     NumberMode,
     RestoreNumber,
 )
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
@@ -33,6 +34,7 @@ from .const import (
     DEFAULT_POT_SIZE,
     ATTR_WATER_CAPACITY,
     DEFAULT_WATER_CAPACITY,
+    DEFAULT_LUX_TO_PPFD,
     HEALTH_MIN_VALUE,
     HEALTH_MAX_VALUE,
     HEALTH_STEP,
@@ -98,7 +100,14 @@ async def async_setup_entry(
         entry,
         plant,
     )
-    
+
+    # Lux to PPFD conversion factor
+    lux_to_ppfd = PlantLuxToPpfd(
+        hass,
+        entry,
+        plant,
+    )
+
     # Min/Max Thresholds
     max_moisture = PlantMaxMoisture(hass, entry, plant)
     min_moisture = PlantMinMoisture(hass, entry, plant)
@@ -130,6 +139,7 @@ async def async_setup_entry(
         water_capacity,
         flowering_duration,
         health_number,
+        lux_to_ppfd,
         max_moisture,
         min_moisture,
         max_temperature,
@@ -159,6 +169,7 @@ async def async_setup_entry(
     plant.add_water_capacity(water_capacity)
     plant.add_flowering_duration(flowering_duration)
     plant.add_health_number(health_number)
+    plant.add_lux_to_ppfd(lux_to_ppfd)
     plant.add_thresholds(
         max_moisture=max_moisture,
         min_moisture=min_moisture,
@@ -188,16 +199,15 @@ async def async_setup_entry(
 class FloweringDurationNumber(NumberEntity, RestoreEntity):
     """Number to track flowering duration."""
 
+    _attr_has_entity_name = True
+    _attr_translation_key = "flowering_duration"
+
     def __init__(self, hass: HomeAssistant, config: ConfigEntry, plant_device) -> None:
         """Initialize the flowering duration number."""
         self._hass = hass
         self._config = config
         self._plant = plant_device
         self._attr_unique_id = f"{config.entry_id}_flowering_duration"
-        self.entity_id = async_generate_entity_id(
-            f"{Platform.NUMBER}.{{}}", f"{plant_device.name}_flowering_duration", hass=hass
-        )
-        self._attr_name = f"{plant_device.name} Flowering Duration"
         self._attr_native_min_value = 0
         self._attr_native_max_value = 365
         self._attr_native_step = 1
@@ -207,11 +217,9 @@ class FloweringDurationNumber(NumberEntity, RestoreEntity):
         self._attr_mode = NumberMode.BOX
 
     @property
-    def device_info(self) -> dict:
+    def device_info(self) -> DeviceInfo:
         """Return device info."""
-        return {
-            "identifiers": {(DOMAIN, self._plant.unique_id)},
-        }
+        return DeviceInfo(identifiers={(DOMAIN, self._plant.unique_id)})
 
     async def _update_cycle_duration(self) -> None:
         """Aktualisiert die flowering_duration für Cycles basierend auf den Member Plants."""
@@ -332,16 +340,15 @@ class FloweringDurationNumber(NumberEntity, RestoreEntity):
 class PotSizeNumber(NumberEntity, RestoreEntity):
     """Number to track pot size in liters."""
 
+    _attr_has_entity_name = True
+    _attr_translation_key = "pot_size"
+
     def __init__(self, hass: HomeAssistant, config: ConfigEntry, plant_device) -> None:
         """Initialize the pot size number."""
         self._hass = hass
         self._config = config
         self._plant = plant_device
         self._attr_unique_id = f"{config.entry_id}_pot_size"
-        self.entity_id = async_generate_entity_id(
-            f"{Platform.NUMBER}.{{}}", f"{plant_device.name}_pot_size", hass=hass
-        )
-        self._attr_name = f"{plant_device.name} Pot Size"
         self._attr_native_min_value = 0
         self._attr_native_max_value = 100
         self._attr_native_step = 0.1
@@ -349,16 +356,14 @@ class PotSizeNumber(NumberEntity, RestoreEntity):
         self._attr_icon = "mdi:cup"
         self._attr_entity_category = None
         self._attr_mode = "box"
-        
+
         # Setze den initialen Wert aus der Config Entry
         self._attr_native_value = self._config.data[FLOW_PLANT_INFO].get(ATTR_POT_SIZE, DEFAULT_POT_SIZE)
 
     @property
-    def device_info(self) -> dict:
+    def device_info(self) -> DeviceInfo:
         """Return device info."""
-        return {
-            "identifiers": {(DOMAIN, self._plant.unique_id)},
-        }
+        return DeviceInfo(identifiers={(DOMAIN, self._plant.unique_id)})
 
     async def _update_cycle_pot_size(self) -> None:
         """Aktualisiert die pot_size für Cycles basierend auf den Member Plants."""
@@ -473,16 +478,15 @@ class PotSizeNumber(NumberEntity, RestoreEntity):
 class WaterCapacityNumber(NumberEntity, RestoreEntity):
     """Number to track water capacity in percent."""
 
+    _attr_has_entity_name = True
+    _attr_translation_key = "water_capacity"
+
     def __init__(self, hass: HomeAssistant, config: ConfigEntry, plant_device) -> None:
         """Initialize the water capacity number."""
         self._hass = hass
         self._config = config
         self._plant = plant_device
         self._attr_unique_id = f"{config.entry_id}_water_capacity"
-        self.entity_id = async_generate_entity_id(
-            f"{Platform.NUMBER}.{{}}", f"{plant_device.name}_water_capacity", hass=hass
-        )
-        self._attr_name = f"{plant_device.name} Water Capacity"
         self._attr_native_min_value = 0
         self._attr_native_max_value = 100
         self._attr_native_step = 1
@@ -495,11 +499,9 @@ class WaterCapacityNumber(NumberEntity, RestoreEntity):
         self._attr_native_value = self._config.data[FLOW_PLANT_INFO].get(ATTR_WATER_CAPACITY, DEFAULT_WATER_CAPACITY)
 
     @property
-    def device_info(self) -> dict:
+    def device_info(self) -> DeviceInfo:
         """Return device info."""
-        return {
-            "identifiers": {(DOMAIN, self._plant.unique_id)},
-        }
+        return DeviceInfo(identifiers={(DOMAIN, self._plant.unique_id)})
 
     async def _update_cycle_water_capacity(self) -> None:
         """Aktualisiert die water_capacity für Cycles basierend auf den Member Plants."""
@@ -614,41 +616,40 @@ class WaterCapacityNumber(NumberEntity, RestoreEntity):
 class PlantHealthNumber(RestoreNumber):
     """Number entity for plant health rating."""
 
+    _attr_has_entity_name = True
+    _attr_translation_key = "health"
+
     def __init__(self, hass: HomeAssistant, config: ConfigEntry, plant_device) -> None:
         """Initialize the health number entity."""
         self._attr_native_min_value = HEALTH_MIN_VALUE
         self._attr_native_max_value = HEALTH_MAX_VALUE
         self._attr_native_step = HEALTH_STEP
         self._attr_mode = NumberMode.BOX
-        
+
         # Hole Default-Wert aus Config Node oder nutze Standard
         default_value = HEALTH_DEFAULT
         for entry in hass.config_entries.async_entries(DOMAIN):
             if entry.data.get("is_config", False):
                 default_value = entry.data[FLOW_PLANT_INFO].get(CONF_DEFAULT_HEALTH, HEALTH_DEFAULT)
                 break
-                
+
         self._attr_native_value = default_value
         self._attr_icon = "mdi:heart-pulse"
-        
+
         self._config = config
         self._hass = hass
         self._plant = plant_device
-        self._attr_name = f"{plant_device.name} Health"
         self._attr_unique_id = f"{config.entry_id}-health"
-        
-        # Initialize health history
+
+        # Initialize health history (friendly_name nicht hardcoded — HA-Pattern)
         self._attr_extra_state_attributes = {
-            "friendly_name": self._attr_name,
             "health_history": []
         }
 
     @property
-    def device_info(self) -> dict:
+    def device_info(self) -> DeviceInfo:
         """Return device info."""
-        return {
-            "identifiers": {(DOMAIN, self._plant.unique_id)},
-        }
+        return DeviceInfo(identifiers={(DOMAIN, self._plant.unique_id)})
 
     async def _update_cycle_health(self) -> None:
         """Aktualisiere den Health-Wert im Cycle basierend auf den Member Plants."""
@@ -787,5 +788,49 @@ class PlantHealthNumber(RestoreNumber):
                                         await cycle.health_number._update_cycle_health()
                                     break
                         break
+
+
+class PlantLuxToPpfd(NumberEntity, RestoreEntity):
+    """Number to configure the Lux to PPFD conversion factor."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "lux_to_ppfd"
+
+    def __init__(self, hass: HomeAssistant, config: ConfigEntry, plant_device) -> None:
+        """Initialize the lux to PPFD conversion factor number."""
+        self._hass = hass
+        self._config = config
+        self._plant = plant_device
+        self._attr_unique_id = f"{config.entry_id}_lux_to_ppfd"
+        self._attr_native_min_value = 0
+        self._attr_native_max_value = 1
+        self._attr_native_step = 0.0001
+        self._attr_icon = "mdi:white-balance-sunny"
+        self._attr_entity_category = EntityCategory.CONFIG
+        self._attr_mode = NumberMode.BOX
+        self._attr_native_value = DEFAULT_LUX_TO_PPFD
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device info."""
+        return DeviceInfo(identifiers={(DOMAIN, self._plant.unique_id)})
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Update the current value."""
+        self._attr_native_value = value
+        self.async_write_ha_state()
+
+    async def async_added_to_hass(self) -> None:
+        """Handle entity which will be added."""
+        await super().async_added_to_hass()
+
+        if not self._config.data[FLOW_PLANT_INFO].get(ATTR_IS_NEW_PLANT, False):
+            # Neustart - stelle letzten Zustand wieder her
+            last_state = await self.async_get_last_state()
+            if last_state is not None:
+                try:
+                    self._attr_native_value = float(last_state.state)
+                except (TypeError, ValueError):
+                    self._attr_native_value = DEFAULT_LUX_TO_PPFD
 
 

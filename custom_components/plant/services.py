@@ -1,7 +1,6 @@
 """Services for plant integration."""
 import logging
 import voluptuous as vol
-import aiohttp
 import os
 from datetime import datetime
 import asyncio
@@ -17,6 +16,7 @@ from homeassistant.core import HomeAssistant, ServiceCall, callback, ServiceResp
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.const import ATTR_NAME, ATTR_ENTITY_PICTURE
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.data_entry_flow import FlowResultType
@@ -1044,21 +1044,24 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         download_path = config_entry.data[FLOW_PLANT_INFO].get(FLOW_DOWNLOAD_PATH, DEFAULT_IMAGE_PATH) if config_entry else DEFAULT_IMAGE_PATH
 
         try:
-            # Erstelle den Download-Pfad falls er nicht existiert
-            if not os.path.exists(download_path):
-                os.makedirs(download_path)
+            # Erstelle den Download-Pfad falls er nicht existiert — im
+            # Executor, damit der Event-Loop nicht durch File-I/O blockiert.
+            await hass.async_add_executor_job(
+                lambda: os.makedirs(download_path, exist_ok=True)
+            )
 
             # Generiere Dateinamen aus entity_id und Timestamp
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"{entity_id}_{timestamp}.jpg"
             filepath = os.path.join(download_path, filename)
 
-            # Lade das Bild herunter
-            async with aiohttp.ClientSession() as session:
-                async with session.get(image_url) as response:
-                    if response.status != 200:
-                        return
-                    image_data = await response.read()
+            # Lade das Bild herunter — reuse HA's globale aiohttp-Session
+            # statt jedes Mal eine eigene aufzumachen.
+            session = async_get_clientsession(hass)
+            async with session.get(image_url) as response:
+                if response.status != 200:
+                    return
+                image_data = await response.read()
 
             # Speichere das Bild
             def write_file():
@@ -1221,15 +1224,20 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                             # Always set main_image_missing flag in export_data
                             export_data["main_image_missing"] = main_image_missing
                             
-                            # Check which files actually exist on disk
+                            # Check which files actually exist on disk —
+                            # ein Executor-Call statt N synchroner os.path.exists.
                             if image_files:
                                 export_data["image_files"] = image_files
-                                
-                                for image_file in image_files:
-                                    image_path = os.path.join(download_path, image_file)
-                                    if os.path.exists(image_path):
+
+                                candidate_paths = [
+                                    (os.path.join(download_path, f), f) for f in image_files
+                                ]
+                                existing_paths = await hass.async_add_executor_job(
+                                    lambda: {p for p, _ in candidate_paths if os.path.exists(p)}
+                                )
+                                for image_path, image_file in candidate_paths:
+                                    if image_path in existing_paths:
                                         all_image_files.append((image_path, image_file))
-                                        pass
                                     else:
                                         _LOGGER.warning(f"Image not found: {image_file} at {image_path}")
                             

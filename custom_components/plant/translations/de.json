@@ -117,7 +117,10 @@
           "humidity_trigger": "Luftfeuchtigkeit als Problemauslöser verwenden",
           "conductivity_trigger": "Leitfähigkeit als Problemauslöser verwenden",
           "moisture_trigger": "Bodenfeuchte als Problemauslöser verwenden",
-          "temperature_trigger": "Temperatur als Problemauslöser verwenden"
+          "temperature_trigger": "Temperatur als Problemauslöser verwenden",
+          "water_consumption_trigger": "Wasserverbrauch als Problemauslöser verwenden",
+          "fertilizer_consumption_trigger": "Düngerverbrauch als Problemauslöser verwenden",
+          "power_consumption_trigger": "Stromverbrauch als Problemauslöser verwenden"
         }
       }
     }
@@ -190,6 +193,14 @@
         "humidity_sensor": {
           "name": "Luftfeuchtigkeitssensor",
           "description": "Luftfeuchtigkeitssensor-Entität"
+        },
+        "power_consumption_sensor": {
+          "name": "Power Consumption Sensor",
+          "description": "Energieverbrauchssensor"
+        },
+        "ph_sensor": {
+          "name": "pH Sensor",
+          "description": "pH-Wert Sensor"
         }
       }
     },
@@ -204,6 +215,34 @@
         "name": {
           "name": "Name",
           "description": "Name für den neuen Pflanzen-Klon"
+        },
+        "temperature_sensor": {
+          "name": "Temperature Sensor",
+          "description": "Temperature sensor for the clone"
+        },
+        "moisture_sensor": {
+          "name": "Moisture Sensor",
+          "description": "Moisture sensor for the clone"
+        },
+        "conductivity_sensor": {
+          "name": "Conductivity Sensor",
+          "description": "Conductivity sensor for the clone"
+        },
+        "illuminance_sensor": {
+          "name": "Illuminance Sensor",
+          "description": "Illuminance sensor for the clone"
+        },
+        "humidity_sensor": {
+          "name": "Humidity Sensor",
+          "description": "Humidity sensor for the clone"
+        },
+        "power_consumption_sensor": {
+          "name": "Power Consumption Sensor",
+          "description": "Power consumption sensor for the clone"
+        },
+        "ph_sensor": {
+          "name": "pH Sensor",
+          "description": "pH-Wert Sensor für den Klon"
         }
       }
     },
@@ -455,6 +494,259 @@
           "name": "Y-Position",
           "description": "Y-Koordinate der Pflanze"
         }
+      }
+    },
+    "export_plants": {
+      "name": "Export Plants",
+      "description": "Exports selected plant configurations to a JSON file or ZIP archive with images",
+      "fields": {
+        "plant_entities": {
+          "name": "Plant Entities",
+          "description": "Select plants to export"
+        },
+        "file_path": {
+          "name": "File Path",
+          "description": "Path to export file (optional, default is /config/plants_export.json)"
+        },
+        "include_images": {
+          "name": "Include Images",
+          "description": "Export images in a ZIP archive"
+        },
+        "include_sensor_data": {
+          "name": "Include Sensor Data",
+          "description": "Sensor- und Helper-Daten mit exportieren"
+        },
+        "sensor_data_days": {
+          "name": "Sensor Data Days",
+          "description": "Anzahl der Tage für Sensor-Verlaufsdaten (1-365, leer = alle verfügbaren)"
+        }
+      }
+    },
+    "import_plants": {
+      "name": "Import Plants",
+      "description": "Importiert Pflanzen-Konfigurationen aus einer ZIP-Datei",
+      "fields": {
+        "file_path": {
+          "name": "File Path",
+          "description": "Pfad zur Import-Datei (ZIP)"
+        },
+        "new_plant_name": {
+          "name": "New Plant Name",
+          "description": "Neuer Name für die importierte Pflanze (optional, sonst Original-Name)"
+        },
+        "overwrite_existing": {
+          "name": "Overwrite Existing",
+          "description": "Overwrite existing plant if name already exists"
+        },
+        "include_images": {
+          "name": "Include Images",
+          "description": "Import images from ZIP archive"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "current_illuminance": {
+        "name": "Beleuchtungsstärke"
+      },
+      "current_conductivity": {
+        "name": "Leitfähigkeit"
+      },
+      "current_moisture": {
+        "name": "Bodenfeuchte"
+      },
+      "current_temperature": {
+        "name": "Temperatur"
+      },
+      "current_humidity": {
+        "name": "Luftfeuchte"
+      },
+      "current_ppfd": {
+        "name": "PPFD"
+      },
+      "current_ph": {
+        "name": "pH"
+      },
+      "current_power_consumption": {
+        "name": "Stromverbrauch"
+      },
+      "dli": {
+        "name": "DLI"
+      },
+      "moisture_consumption": {
+        "name": "Wasserverbrauch"
+      },
+      "fertilizer_consumption": {
+        "name": "Düngerverbrauch"
+      },
+      "total_water_consumption": {
+        "name": "Gesamtwasserverbrauch"
+      },
+      "total_fertilizer_consumption": {
+        "name": "Gesamt-Düngerverbrauch"
+      },
+      "total_power_consumption": {
+        "name": "Gesamt-Stromverbrauch"
+      },
+      "energy_cost": {
+        "name": "Energiekosten"
+      },
+      "median_temperature": {
+        "name": "Median-Temperatur"
+      },
+      "median_moisture": {
+        "name": "Median-Bodenfeuchte"
+      },
+      "median_conductivity": {
+        "name": "Median-Leitfähigkeit"
+      },
+      "median_illuminance": {
+        "name": "Median-Beleuchtungsstärke"
+      },
+      "median_humidity": {
+        "name": "Median-Luftfeuchte"
+      },
+      "median_ph": {
+        "name": "Median-pH"
+      },
+      "median_ppfd": {
+        "name": "Median-PPFD"
+      },
+      "median_dli": {
+        "name": "Median-DLI"
+      },
+      "median_total_integral": {
+        "name": "Median Gesamt-PPFD-Integral"
+      },
+      "median_moisture_consumption": {
+        "name": "Median Wasserverbrauch"
+      },
+      "median_total_water_consumption": {
+        "name": "Median Gesamt-Wasserverbrauch"
+      },
+      "median_fertilizer_consumption": {
+        "name": "Median Düngerverbrauch"
+      },
+      "median_total_fertilizer_consumption": {
+        "name": "Median Gesamt-Düngerverbrauch"
+      },
+      "median_power_consumption": {
+        "name": "Median Stromverbrauch"
+      },
+      "median_total_power_consumption": {
+        "name": "Median Gesamt-Stromverbrauch"
+      },
+      "dummy_illuminance": {
+        "name": "Test-Beleuchtungsstärke"
+      },
+      "dummy_conductivity": {
+        "name": "Test-Leitfähigkeit"
+      },
+      "dummy_moisture": {
+        "name": "Test-Bodenfeuchte"
+      },
+      "dummy_temperature": {
+        "name": "Test-Temperatur"
+      },
+      "dummy_humidity": {
+        "name": "Test-Luftfeuchte"
+      }
+    },
+    "number": {
+      "flowering_duration": {
+        "name": "Blütedauer"
+      },
+      "pot_size": {
+        "name": "Topfgröße"
+      },
+      "water_capacity": {
+        "name": "Wasserkapazität"
+      },
+      "health": {
+        "name": "Gesundheit"
+      },
+      "lux_to_ppfd": {
+        "name": "Lux-zu-PPFD-Faktor"
+      },
+      "max_moisture": {
+        "name": "Max Bodenfeuchte"
+      },
+      "min_moisture": {
+        "name": "Min Bodenfeuchte"
+      },
+      "max_temperature": {
+        "name": "Max Temperatur"
+      },
+      "min_temperature": {
+        "name": "Min Temperatur"
+      },
+      "max_illuminance": {
+        "name": "Max Beleuchtungsstärke"
+      },
+      "min_illuminance": {
+        "name": "Min Beleuchtungsstärke"
+      },
+      "max_dli": {
+        "name": "Max DLI"
+      },
+      "min_dli": {
+        "name": "Min DLI"
+      },
+      "max_conductivity": {
+        "name": "Max Leitfähigkeit"
+      },
+      "min_conductivity": {
+        "name": "Min Leitfähigkeit"
+      },
+      "max_humidity": {
+        "name": "Max Luftfeuchte"
+      },
+      "min_humidity": {
+        "name": "Min Luftfeuchte"
+      },
+      "max_water_consumption": {
+        "name": "Max Wasserverbrauch"
+      },
+      "min_water_consumption": {
+        "name": "Min Wasserverbrauch"
+      },
+      "max_fertilizer_consumption": {
+        "name": "Max Düngerverbrauch"
+      },
+      "min_fertilizer_consumption": {
+        "name": "Min Düngerverbrauch"
+      },
+      "max_power_consumption": {
+        "name": "Max Stromverbrauch"
+      },
+      "min_power_consumption": {
+        "name": "Min Stromverbrauch"
+      },
+      "max_ph": {
+        "name": "Max pH"
+      },
+      "min_ph": {
+        "name": "Min pH"
+      }
+    },
+    "select": {
+      "growth_phase": {
+        "name": "Wachstumsphase"
+      },
+      "cycle": {
+        "name": "Zyklus"
+      },
+      "treatment": {
+        "name": "Behandlung"
+      }
+    },
+    "text": {
+      "journal": {
+        "name": "Journal"
+      },
+      "location": {
+        "name": "Standort"
       }
     }
   }

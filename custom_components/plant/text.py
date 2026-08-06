@@ -6,6 +6,7 @@ from datetime import datetime
 import json
 
 from homeassistant.components.text import TextEntity
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import EntityCategory
@@ -47,6 +48,9 @@ async def async_setup_entry(
 class PlantJournal(TextEntity, RestoreEntity):
     """Representation of a plant journal text entity."""
 
+    _attr_has_entity_name = True
+    _attr_translation_key = "journal"
+
     def __init__(self, hass: HomeAssistant, config: ConfigEntry, plant_device) -> None:
         """Initialize the plant journal."""
         self._attr_native_value = ""
@@ -54,18 +58,15 @@ class PlantJournal(TextEntity, RestoreEntity):
         self._config = config
         self._hass = hass
         self._plant = plant_device
-        self._attr_name = f"{plant_device.name} Journal"
         self._attr_unique_id = f"{config.entry_id}-journal"
         # Journal ist keine Diagnose-Entity
         self._attr_entity_category = None
         self._attr_icon = "mdi:notebook"
 
     @property
-    def device_info(self) -> dict:
+    def device_info(self) -> DeviceInfo:
         """Return device info."""
-        return {
-            "identifiers": {(DOMAIN, self._plant.unique_id)},
-        }
+        return DeviceInfo(identifiers={(DOMAIN, self._plant.unique_id)})
 
     async def async_added_to_hass(self) -> None:
         """Handle entity which will be added."""
@@ -84,6 +85,9 @@ class PlantJournal(TextEntity, RestoreEntity):
 class PlantLocation(TextEntity, RestoreEntity):
     """Representation of a plant location entity."""
 
+    _attr_has_entity_name = True
+    _attr_translation_key = "location"
+
     def __init__(self, hass: HomeAssistant, config: ConfigEntry, plant_device) -> None:
         """Initialize the plant location."""
         self._attr_native_value = "{}"  # Leeres JSON-Objekt als Standardwert
@@ -91,7 +95,6 @@ class PlantLocation(TextEntity, RestoreEntity):
         self._config = config
         self._hass = hass
         self._plant = plant_device
-        self._attr_name = f"{plant_device.name} Location"
         self._attr_unique_id = f"{config.entry_id}-location"
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
         self._attr_icon = "mdi:map-marker"
@@ -110,11 +113,9 @@ class PlantLocation(TextEntity, RestoreEntity):
             }
 
     @property
-    def device_info(self) -> dict:
+    def device_info(self) -> DeviceInfo:
         """Return device info."""
-        return {
-            "identifiers": {(DOMAIN, self._plant.unique_id)},
-        }
+        return DeviceInfo(identifiers={(DOMAIN, self._plant.unique_id)})
 
     async def async_added_to_hass(self) -> None:
         """Handle entity which will be added."""
@@ -145,10 +146,19 @@ class PlantLocation(TextEntity, RestoreEntity):
         
         # Initialisiere mit aktuellem Raum
         await self._update_current_area()
-        
+
         # Für Cycles: Initialisiere mit aktuellen Member-Areas
         if self._plant.device_type == DEVICE_TYPE_CYCLE:
             await self._update_member_areas()
+        else:
+            # Auto-Position für Plants ohne x/y in derselben Area belegen.
+            # Deckt alle Creation-Paths ab (Config-Flow, Service, Import),
+            # nicht nur den Card-Dialog-Pfad der plant-created dispatcht.
+            if (
+                self._location.get("x") is None
+                or self._location.get("y") is None
+            ):
+                self._auto_assign_position()
 
     async def _update_current_area(self):
         """Aktualisiere den aktuellen Raum."""
@@ -318,7 +328,21 @@ class PlantLocation(TextEntity, RestoreEntity):
                 # Aktualisiere den Wert
                 self._attr_native_value = json.dumps(self._location)
                 self.async_write_ha_state()
-                
+
+                # Re-Position wenn Plant in eine neue Area gewandert ist und
+                # die alte (x,y) jetzt mit einer anderen Plant in der neuen
+                # Area kollidiert — dann spiral neu vergeben.
+                if (
+                    self._plant.device_type == DEVICE_TYPE_PLANT
+                    and old_area_name != new_area_name
+                    and self._is_position_taken_by_other(
+                        self._location.get("x"),
+                        self._location.get("y"),
+                        new_area_name,
+                    )
+                ):
+                    self._auto_assign_position()
+
                 # Löse ein eigenes plant_area_changed Event aus, falls sich die Area geändert hat
                 if old_area_name != new_area_name:
                     # Prüfe, ob die Änderung von einem Cycle stammt
@@ -418,6 +442,94 @@ class PlantLocation(TextEntity, RestoreEntity):
                     
         except json.JSONDecodeError:
             _LOGGER.error("Invalid JSON format for location")
+
+    def _is_position_taken_by_other(self, x, y, area_name) -> bool:
+        """True wenn (x,y) in der angegebenen Area schon von einer anderen Plant belegt ist."""
+        if not isinstance(x, int) or not isinstance(y, int):
+            return False
+        for entry_id, data in self._hass.data.get(DOMAIN, {}).items():
+            other_plant = data.get(ATTR_PLANT)
+            if not other_plant or other_plant is self._plant:
+                continue
+            if getattr(other_plant, "device_type", None) != DEVICE_TYPE_PLANT:
+                continue
+            other_loc = getattr(other_plant, "location_history", None)
+            if not other_loc:
+                continue
+            other_state = self._hass.states.get(other_loc.entity_id)
+            if not other_state or not other_state.state:
+                continue
+            try:
+                parsed = json.loads(other_state.state)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if parsed.get("area") != area_name:
+                continue
+            if parsed.get("x") == x and parsed.get("y") == y:
+                return True
+        return False
+
+    @callback
+    def _auto_assign_position(self) -> None:
+        """Find next free spiral position among plants in the same area and persist it.
+
+        Spiral mirrors the card's _distributeUndefinedPositionEntities so that
+        manual UI/API creation paths get the same auto-positioning that the
+        area-card's plant-create dialog already provides via the plant-created
+        event.
+        """
+        if self._plant.device_type != DEVICE_TYPE_PLANT:
+            return
+
+        current_area = self._location.get("area")
+        occupied: set[tuple[int, int]] = set()
+        for entry_id, data in self._hass.data.get(DOMAIN, {}).items():
+            other_plant = data.get(ATTR_PLANT)
+            if not other_plant or other_plant is self._plant:
+                continue
+            if getattr(other_plant, "device_type", None) != DEVICE_TYPE_PLANT:
+                continue
+            other_loc = getattr(other_plant, "location_history", None)
+            if not other_loc:
+                continue
+            other_state = self._hass.states.get(other_loc.entity_id)
+            if not other_state or not other_state.state:
+                continue
+            try:
+                parsed = json.loads(other_state.state)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if parsed.get("area") != current_area:
+                continue
+            ox, oy = parsed.get("x"), parsed.get("y")
+            if isinstance(ox, int) and isinstance(oy, int):
+                occupied.add((ox, oy))
+
+        directions = [(1, 0), (0, 1), (-1, 0), (0, -1)]
+        x = y = dir_idx = side_step = turn_count = 0
+        side_len = 1
+        for _ in range(1000):
+            if (x, y) not in occupied:
+                self._location["x"] = x
+                self._location["y"] = y
+                self._attr_native_value = json.dumps(self._location)
+                self.async_write_ha_state()
+                _LOGGER.debug(
+                    "Auto-assigned position (%s, %s) to %s in area %s",
+                    x, y, self._plant.entity_id, current_area,
+                )
+                return
+            dx, dy = directions[dir_idx]
+            x += dx
+            y += dy
+            side_step += 1
+            if side_step == side_len:
+                dir_idx = (dir_idx + 1) % 4
+                side_step = 0
+                turn_count += 1
+                if turn_count == 2:
+                    side_len += 1
+                    turn_count = 0
 
     def add_position(self, x: int, y: int) -> bool:
         """Aktualisiert die Position (nur für Plants)."""

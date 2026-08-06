@@ -3,6 +3,7 @@
   "name": "Brokkoli Plant Manager",
   "after_dependencies": [
     "recorder",
+    "logbook",
     "seedfinder",
     "integration",
     "utility_meter"
@@ -14,16 +15,7 @@
   "config_flow": true,
   "documentation": "https://github.com/dingausmwald/homeassistant-brokkoli/",
   "issue_tracker": "https://github.com/dingausmwald/homeassistant-brokkoli/issues",
-  "requirements": [
-    "async-timeout>=4.0.2"
-  ],
-  "version": "2025.4.0-beta1",
-  "translations": [
-    {
-      "platform": "config_flow",
-      "version": "1.0",
-      "languages": ["en", "de"]
-    }
-  ],
-  "iot_class": "local_push"
+  "iot_class": "calculated",
+  "requirements": [],
+  "version": "2026.8.0"
 }
