@@ -108,7 +108,7 @@ DATA_SOURCE_MANUAL = "Manual"
 DATA_SOURCE_DEFAULT = "Default values"
 DATA_UPDATED = "plant_data_updated"
 
-UNIT_PPFD = "mol/s⋅m²s"
+UNIT_PPFD = "mol/s⋅m²"
 UNIT_MICRO_PPFD = "μmol/s⋅m²"
 UNIT_DLI = "mol/d⋅m²"
 UNIT_MICRO_DLI = "μmol/d⋅m²"

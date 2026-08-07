@@ -128,6 +128,7 @@ def _init_accepts_hass(cls: type) -> bool:
 
 
 _INTEGRATION_SENSOR_ACCEPTS_HASS = _init_accepts_hass(IntegrationSensor)
+_UTILITY_METER_SENSOR_ACCEPTS_HASS = _init_accepts_hass(UtilityMeterSensor)
 
 
 @dataclass
@@ -931,15 +932,21 @@ class PlantTotalLightIntegral(IntegrationSensor):
             self._state = 0  # Wichtig für IntegrationSensor
 
 
-class PlantDailyLightIntegral(RestoreSensor):
-    # MEASUREMENT damit HA Long-Term-Statistics kompiliert (Graph braucht das)
-    _attr_state_class = SensorStateClass.MEASUREMENT
+class PlantDailyLightIntegral(UtilityMeterSensor):
+    """Tages-DLI aus dem PPFD-Integral.
 
-    """Entity class to calculate Daily Light Integral from PPDF"""
-
+    Nutzt Home Assistants UtilityMeterSensor mit Tageszyklus, wie es die
+    Ursprungsintegration tut, statt ein 24-Stunden-Fenster von Hand zu fuehren.
+    Der Zaehler setzt um Mitternacht zurueck und liefert damit den DLI im
+    ueblichen Sinn: die an diesem Tag aufgenommene Lichtmenge.
+    """
 
     _attr_has_entity_name = True
+    _attr_device_class = ATTR_DLI
+    _attr_icon = ICON_DLI
+    _attr_suggested_display_precision = 2
     _attr_translation_key = "dli"
+
     def __init__(
         self,
         hass: HomeAssistant,
@@ -948,138 +955,41 @@ class PlantDailyLightIntegral(RestoreSensor):
         plantdevice: Entity,
     ) -> None:
         """Initialize the sensor"""
-        self._hass = hass
-        self._config = config
         self._plant = plantdevice
-        self._attr_unique_id = f"{config.entry_id}-dli"
-        self._attr_native_unit_of_measurement = UNIT_DLI
-        self._attr_icon = ICON_DLI
-        self._source_entity = illuminance_integration_sensor.entity_id
-        self._history = []
-        self._last_update = None
-        self._attr_native_value = 0  # Starte immer bei 0
-        self._last_value = None  # Initialisiere _last_value
-        
-        # Bei Neuerstellung explizit auf 0 setzen
-        if config.data[FLOW_PLANT_INFO].get(ATTR_IS_NEW_PLANT, False):
-            self._attr_native_value = 0
-            self._history = []
+
+        utility_meter_kwargs = {
+            "cron_pattern": None,
+            "delta_values": None,
+            "meter_offset": timedelta(seconds=0),
+            "meter_type": DAILY,
+            "name": f"{plantdevice.name} {READING_DLI}",
+            "net_consumption": None,
+            "parent_meter": config.entry_id,
+            "source_entity": illuminance_integration_sensor.entity_id,
+            "tariff_entity": None,
+            "tariff": None,
+            "unique_id": f"{config.entry_id}-dli",
+            "sensor_always_available": True,
+            "suggested_entity_id": None,
+            "periodically_resetting": True,
+        }
+        if _UTILITY_METER_SENSOR_ACCEPTS_HASS:
+            utility_meter_kwargs["hass"] = hass
+        super().__init__(**utility_meter_kwargs)
 
     @property
-    def device_class(self) -> str:
-        return ATTR_DLI
+    def native_unit_of_measurement(self) -> str:
+        """Einheit fest auf DLI.
+
+        UtilityMeterSensor uebernimmt die Einheit sonst bei jeder Aenderung vom
+        Quellsensor - das waere mol/m2 statt mol/m2/d.
+        """
+        return UNIT_DLI
 
     @property
     def device_info(self) -> DeviceInfo:
         """Return device info."""
         return DeviceInfo(identifiers={(DOMAIN, self._plant.unique_id)})
-
-    @property
-    def extra_state_attributes(self) -> dict:
-        """Return additional sensor attributes."""
-        return {
-            "last_update": self._last_update,
-            "source_entity": self._source_entity,
-        }
-
-    @property
-    def extra_restore_state_data(self) -> PlantHistoryExtraStoredData:
-        """Das 24h-Fenster über Neustarts hinweg sichern.
-
-        Bewusst nicht als State-Attribut: Attribute schreibt der Recorder bei
-        jeder Zustandsänderung vollständig in die Verlaufsdatenbank, was hier
-        alle paar Minuten eine komplette Kopie der Messreihe bedeutete. Über
-        extra_restore_state_data landen die Daten nur in core.restore_state,
-        also genau dort, wo sie für den Neustart gebraucht werden.
-        """
-        return PlantHistoryExtraStoredData(
-            self.native_value,
-            self.native_unit_of_measurement,
-            [(t.isoformat(), v) for t, v in self._history],
-        )
-
-    async def async_added_to_hass(self) -> None:
-        """Handle entity which will be added."""
-        await super().async_added_to_hass()
-
-        if not self._config.data[FLOW_PLANT_INFO].get(ATTR_IS_NEW_PLANT, False):
-            last_data = await self.async_get_last_sensor_data()
-            restored = False
-            if last_data is not None and last_data.native_value is not None:
-                try:
-                    self._attr_native_value = float(last_data.native_value)
-                    restored = True
-                except (TypeError, ValueError):
-                    pass
-            last_state = await self.async_get_last_state()
-            if not restored and last_state and last_state.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE):
-                try:
-                    self._attr_native_value = float(last_state.state)
-                except (TypeError, ValueError):
-                    pass
-            if last_state:
-                if last_state.attributes.get("last_update"):
-                    self._last_update = last_state.attributes["last_update"]
-                # Neu: aus den Restore-Daten. Der Rückfall auf das alte Attribut
-                # greift genau einmal, beim ersten Start nach dem Update.
-                extra = await self.async_get_last_extra_data()
-                hist_json = None
-                if extra is not None:
-                    wieder = PlantHistoryExtraStoredData.from_dict(extra.as_dict())
-                    if wieder is not None:
-                        hist_json = wieder.history
-                if not hist_json:
-                    hist_json = last_state.attributes.get("history_json")
-                if hist_json:
-                    try:
-                        self._history = [
-                            (dt_util.parse_datetime(t), float(v))
-                            for t, v in hist_json
-                            if dt_util.parse_datetime(t) is not None
-                        ]
-                    except (TypeError, ValueError):
-                        self._history = []
-
-        # Track source entity changes
-        async_track_state_change_event(
-            self._hass,
-            [self._source_entity],
-            self._state_changed_event,
-        )
-
-    @callback
-    def _state_changed_event(self, event):
-        """Handle source entity state changes."""
-        if self._config.data[FLOW_PLANT_INFO].get(ATTR_IS_NEW_PLANT, False):
-            return  # Bei neuer Plant keine Änderungen verarbeiten
-
-        new_state = event.data.get("new_state")
-        if not new_state or new_state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
-            return
-
-        try:
-            current_value = float(new_state.state)
-            current_time = dt_util.utcnow()
-            
-            # Add to history
-            self._history.append((current_time, current_value))
-            
-            # Entferne Einträge älter als 24 Stunden
-            cutoff_time = current_time - timedelta(hours=24)
-            self._history = [(t, v) for t, v in self._history if t >= cutoff_time]
-            
-            # Berechne DLI aus den letzten 24 Stunden
-            if len(self._history) >= 2:
-                # Konvertiere von mol/m²/s zu mol/m²/d (DLI)
-                time_diff = (self._history[-1][0] - self._history[0][0]).total_seconds()
-                if time_diff > 0:
-                    dli = (current_value - self._history[0][1]) * (24 * 3600 / time_diff)
-                    self._attr_native_value = round(max(0, dli), 2)
-                    self._last_update = current_time.isoformat()
-                    self.async_write_ha_state()
-                
-        except (TypeError, ValueError):
-            pass
 
 
 class PlantDummyStatus(SensorEntity):
