@@ -883,12 +883,19 @@ class PlantTotalLightIntegral(IntegrationSensor):
         integration_kwargs = {
             "integration_method": METHOD_TRAPEZOIDAL,
             "name": f"{plantdevice.name} Total {READING_PPFD} Integral",
-            "round_digits": 2,
+            # PPFD liegt in der Groessenordnung 1e-6 mol/s⋅m². Mit nur zwei
+            # Nachkommastellen faellt jeder Zuwachs unter eine Stunde beim
+            # Runden weg und das Integral bleibt auf demselben Wert stehen -
+            # der DLI, der die Aenderung ueber 24 h misst, sieht dann 0.
+            "round_digits": 6,
             "source_entity": illuminance_ppfd_sensor.entity_id,
             "unique_id": f"{config.entry_id}-ppfd-integral",
             "unit_prefix": None,
             "unit_time": UnitOfTime.SECONDS,
-            "max_sub_interval": None,
+            # Ohne Takt rechnet das Integral nur, wenn die Quelle ihren
+            # Zustand aendert. Bei konstantem Licht schreibt es dann stunden-
+            # lang nichts. Eine Minute Takt haelt es am Laufen.
+            "max_sub_interval": timedelta(minutes=1),
         }
         if _INTEGRATION_SENSOR_ACCEPTS_HASS:
             integration_kwargs["hass"] = hass
