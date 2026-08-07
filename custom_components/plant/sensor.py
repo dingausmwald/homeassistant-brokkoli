@@ -20,6 +20,7 @@ from homeassistant.components.sensor import (
     SensorExtraStoredData,
     SensorStateClass,
 )
+from homeassistant.components.statistics.sensor import StatisticsSensor
 from homeassistant.components.utility_meter.const import DAILY
 from homeassistant.components.utility_meter.sensor import UtilityMeterSensor
 from homeassistant.config_entries import ConfigEntry
@@ -128,7 +129,7 @@ def _init_accepts_hass(cls: type) -> bool:
 
 
 _INTEGRATION_SENSOR_ACCEPTS_HASS = _init_accepts_hass(IntegrationSensor)
-_UTILITY_METER_SENSOR_ACCEPTS_HASS = _init_accepts_hass(UtilityMeterSensor)
+_STATISTICS_SENSOR_ACCEPTS_HASS = _init_accepts_hass(StatisticsSensor)
 
 
 @dataclass
@@ -932,13 +933,17 @@ class PlantTotalLightIntegral(IntegrationSensor):
             self._state = 0  # Wichtig für IntegrationSensor
 
 
-class PlantDailyLightIntegral(UtilityMeterSensor):
-    """Tages-DLI aus dem PPFD-Integral.
+class PlantDailyLightIntegral(StatisticsSensor):
+    """Rollierender 24-Stunden-DLI.
 
-    Nutzt Home Assistants UtilityMeterSensor mit Tageszyklus, wie es die
-    Ursprungsintegration tut, statt ein 24-Stunden-Fenster von Hand zu fuehren.
-    Der Zaehler setzt um Mitternacht zurueck und liefert damit den DLI im
-    ueblichen Sinn: die an diesem Tag aufgenommene Lichtmenge.
+    Zeigt die in den letzten 24 Stunden aufgenommene Lichtmenge, gleitend und
+    ohne Reset um Mitternacht - das Verhalten, das dieser Sensor immer hatte.
+
+    Neu ist nur der Unterbau: statt einer selbst gefuehrten Messreihe im
+    Speicher rechnet jetzt Home Assistants Statistik-Sensor mit der Kennzahl
+    "change" ueber einem 24-Stunden-Fenster. Das ist dieselbe Rechnung
+    (Zaehlerstand jetzt minus Zaehlerstand vor 24 Stunden), nur dass HA die
+    Messwerte haelt und aus der Recorder-Datenbank speist.
     """
 
     _attr_has_entity_name = True
@@ -957,39 +962,49 @@ class PlantDailyLightIntegral(UtilityMeterSensor):
         """Initialize the sensor"""
         self._plant = plantdevice
 
-        utility_meter_kwargs = {
-            "cron_pattern": None,
-            "delta_values": None,
-            "meter_offset": timedelta(seconds=0),
-            "meter_type": DAILY,
-            "name": f"{plantdevice.name} {READING_DLI}",
-            "net_consumption": None,
-            "parent_meter": config.entry_id,
-            "source_entity": illuminance_integration_sensor.entity_id,
-            "tariff_entity": None,
-            "tariff": None,
+        statistics_kwargs = {
+            "source_entity_id": illuminance_integration_sensor.entity_id,
+            "name": READING_DLI,
             "unique_id": f"{config.entry_id}-dli",
-            "sensor_always_available": True,
-            "suggested_entity_id": None,
-            "periodically_resetting": True,
+            "state_characteristic": "change",
+            "samples_max_buffer_size": None,  # unbegrenzt, das Fenster steuert max_age
+            "samples_max_age": timedelta(hours=24),
+            "samples_keep_last": True,
+            "precision": 2,
+            "percentile": 50,  # fuer "change" ohne Bedeutung, aber Pflichtargument
         }
-        if _UTILITY_METER_SENSOR_ACCEPTS_HASS:
-            utility_meter_kwargs["hass"] = hass
-        super().__init__(**utility_meter_kwargs)
+        if _STATISTICS_SENSOR_ACCEPTS_HASS:
+            statistics_kwargs["hass"] = hass
+        super().__init__(**statistics_kwargs)
+        # StatisticsSensor setzt _attr_name aus dem name-Argument. Das Attribut
+        # muss weg - nicht auf None gesetzt: HA nimmt die Uebersetzung nur,
+        # wenn _attr_name gar nicht existiert. None hiesse "kein Name".
+        if hasattr(self, "_attr_name"):
+            del self._attr_name
 
     @property
     def native_unit_of_measurement(self) -> str:
-        """Einheit fest auf DLI.
-
-        UtilityMeterSensor uebernimmt die Einheit sonst bei jeder Aenderung vom
-        Quellsensor - das waere mol/m2 statt mol/m2/d.
-        """
+        """Einheit fest auf DLI statt der Einheit des Quellsensors."""
         return UNIT_DLI
 
     @property
     def device_info(self) -> DeviceInfo:
         """Return device info."""
         return DeviceInfo(identifiers={(DOMAIN, self._plant.unique_id)})
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Den Aufraeum-Timer beim Entfernen abbestellen.
+
+        StatisticsSensor legt seinen Purge-Timer ueber
+        async_track_point_in_utc_time an, meldet ihn aber - anders als seine
+        State-Listener - nicht bei async_on_remove an. Er ueberlebt sonst die
+        Entitaet. _async_cancel_update_listener ist private HA-API, deshalb
+        abgesichert aufgerufen.
+        """
+        await super().async_will_remove_from_hass()
+        abbestellen = getattr(self, "_async_cancel_update_listener", None)
+        if abbestellen is not None:
+            abbestellen()
 
 
 class PlantDummyStatus(SensorEntity):
