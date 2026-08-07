@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 import inspect
 import logging
@@ -16,6 +17,7 @@ from homeassistant.components.sensor import (
     RestoreSensor,
     SensorDeviceClass,
     SensorEntity,
+    SensorExtraStoredData,
     SensorStateClass,
 )
 from homeassistant.components.utility_meter.const import DAILY
@@ -126,6 +128,34 @@ def _init_accepts_hass(cls: type) -> bool:
 
 
 _INTEGRATION_SENSOR_ACCEPTS_HASS = _init_accepts_hass(IntegrationSensor)
+
+
+@dataclass
+class PlantHistoryExtraStoredData(SensorExtraStoredData):
+    """Restore-Daten eines Sensors samt seinem 24-Stunden-Fenster.
+
+    SensorExtraStoredData bringt native_value und Einheit mit; hier kommt die
+    Messreihe dazu, die die Verbrauchs- und DLI-Sensoren zum Weiterrechnen nach
+    einem Neustart brauchen.
+    """
+
+    history: list | None = None
+
+    def as_dict(self) -> dict:
+        daten = super().as_dict()
+        daten["history"] = self.history or []
+        return daten
+
+    @classmethod
+    def from_dict(cls, restored: dict) -> PlantHistoryExtraStoredData | None:
+        basis = SensorExtraStoredData.from_dict(restored)
+        if basis is None:
+            return None
+        return cls(
+            basis.native_value,
+            basis.native_unit_of_measurement,
+            restored.get("history") or [],
+        )
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ):
@@ -950,9 +980,23 @@ class PlantDailyLightIntegral(RestoreSensor):
         return {
             "last_update": self._last_update,
             "source_entity": self._source_entity,
-            # Persistiere _history damit 24h-Window nach Restart nicht bei 0 startet.
-            "history_json": [(t.isoformat(), v) for t, v in self._history],
         }
+
+    @property
+    def extra_restore_state_data(self) -> PlantHistoryExtraStoredData:
+        """Das 24h-Fenster über Neustarts hinweg sichern.
+
+        Bewusst nicht als State-Attribut: Attribute schreibt der Recorder bei
+        jeder Zustandsänderung vollständig in die Verlaufsdatenbank, was hier
+        alle paar Minuten eine komplette Kopie der Messreihe bedeutete. Über
+        extra_restore_state_data landen die Daten nur in core.restore_state,
+        also genau dort, wo sie für den Neustart gebraucht werden.
+        """
+        return PlantHistoryExtraStoredData(
+            self.native_value,
+            self.native_unit_of_measurement,
+            [(t.isoformat(), v) for t, v in self._history],
+        )
 
     async def async_added_to_hass(self) -> None:
         """Handle entity which will be added."""
@@ -976,7 +1020,16 @@ class PlantDailyLightIntegral(RestoreSensor):
             if last_state:
                 if last_state.attributes.get("last_update"):
                     self._last_update = last_state.attributes["last_update"]
-                hist_json = last_state.attributes.get("history_json")
+                # Neu: aus den Restore-Daten. Der Rückfall auf das alte Attribut
+                # greift genau einmal, beim ersten Start nach dem Update.
+                extra = await self.async_get_last_extra_data()
+                hist_json = None
+                if extra is not None:
+                    wieder = PlantHistoryExtraStoredData.from_dict(extra.as_dict())
+                    if wieder is not None:
+                        hist_json = wieder.history
+                if not hist_json:
+                    hist_json = last_state.attributes.get("history_json")
                 if hist_json:
                     try:
                         self._history = [
@@ -1358,9 +1411,23 @@ class PlantCurrentMoistureConsumption(RestoreSensor):
             "pot_size": self._plant.pot_size.native_value if self._plant.pot_size else None,
             "water_capacity": self._plant.water_capacity.native_value if self._plant.water_capacity else None,
             "last_update": self._last_update,
-            # Persistiere _history damit 24h-Window nach Restart nicht bei 0 startet.
-            "history_json": [(t.isoformat(), v) for t, v in self._history],
         }
+
+    @property
+    def extra_restore_state_data(self) -> PlantHistoryExtraStoredData:
+        """Das 24h-Fenster über Neustarts hinweg sichern.
+
+        Bewusst nicht als State-Attribut: Attribute schreibt der Recorder bei
+        jeder Zustandsänderung vollständig in die Verlaufsdatenbank, was hier
+        alle paar Minuten eine komplette Kopie der Messreihe bedeutete. Über
+        extra_restore_state_data landen die Daten nur in core.restore_state,
+        also genau dort, wo sie für den Neustart gebraucht werden.
+        """
+        return PlantHistoryExtraStoredData(
+            self.native_value,
+            self.native_unit_of_measurement,
+            [(t.isoformat(), v) for t, v in self._history],
+        )
 
     async def async_added_to_hass(self) -> None:
         """Handle entity which will be added."""
@@ -1387,7 +1454,16 @@ class PlantCurrentMoistureConsumption(RestoreSensor):
             if last_state:
                 if last_state.attributes.get("last_update"):
                     self._last_update = last_state.attributes["last_update"]
-                hist_json = last_state.attributes.get("history_json")
+                # Neu: aus den Restore-Daten. Der Rückfall auf das alte Attribut
+                # greift genau einmal, beim ersten Start nach dem Update.
+                extra = await self.async_get_last_extra_data()
+                hist_json = None
+                if extra is not None:
+                    wieder = PlantHistoryExtraStoredData.from_dict(extra.as_dict())
+                    if wieder is not None:
+                        hist_json = wieder.history
+                if not hist_json:
+                    hist_json = last_state.attributes.get("history_json")
                 if hist_json:
                     try:
                         self._history = [
@@ -1491,9 +1567,23 @@ class PlantCurrentFertilizerConsumption(RestoreSensor):
         """Return additional sensor attributes."""
         return {
             "last_update": self._last_update,
-            # Persistiere _history damit 24h-Window nach Restart nicht bei 0 startet.
-            "history_json": [(t.isoformat(), v) for t, v in self._history],
         }
+
+    @property
+    def extra_restore_state_data(self) -> PlantHistoryExtraStoredData:
+        """Das 24h-Fenster über Neustarts hinweg sichern.
+
+        Bewusst nicht als State-Attribut: Attribute schreibt der Recorder bei
+        jeder Zustandsänderung vollständig in die Verlaufsdatenbank, was hier
+        alle paar Minuten eine komplette Kopie der Messreihe bedeutete. Über
+        extra_restore_state_data landen die Daten nur in core.restore_state,
+        also genau dort, wo sie für den Neustart gebraucht werden.
+        """
+        return PlantHistoryExtraStoredData(
+            self.native_value,
+            self.native_unit_of_measurement,
+            [(t.isoformat(), v) for t, v in self._history],
+        )
 
     async def async_added_to_hass(self) -> None:
         """Handle entity which will be added."""
@@ -1521,7 +1611,16 @@ class PlantCurrentFertilizerConsumption(RestoreSensor):
             if last_state:
                 if last_state.attributes.get("last_update"):
                     self._last_update = last_state.attributes["last_update"]
-                hist_json = last_state.attributes.get("history_json")
+                # Neu: aus den Restore-Daten. Der Rückfall auf das alte Attribut
+                # greift genau einmal, beim ersten Start nach dem Update.
+                extra = await self.async_get_last_extra_data()
+                hist_json = None
+                if extra is not None:
+                    wieder = PlantHistoryExtraStoredData.from_dict(extra.as_dict())
+                    if wieder is not None:
+                        hist_json = wieder.history
+                if not hist_json:
+                    hist_json = last_state.attributes.get("history_json")
                 if hist_json:
                     try:
                         self._history = [
