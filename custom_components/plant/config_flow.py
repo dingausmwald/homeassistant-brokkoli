@@ -475,6 +475,13 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 FLOW_SENSOR_PH: user_input.get(FLOW_SENSOR_PH),
             }
 
+            # Seedfinder answers with the breeder's *display* name ("Skunk House
+            # Genetics"), which is not the name its URL is built from ("Skunk
+            # House"). The response overwrites ATTR_BREEDER below, so keep the
+            # term that actually resolved -- every later lookup has to reuse it,
+            # otherwise it 404s and the whole enrichment is lost.
+            self._breeder_query = self.plant_info[ATTR_BREEDER]
+
             plant_helper = PlantHelper(hass=self.hass)
             plant_config = await plant_helper.get_plantbook_data({
                 ATTR_STRAIN: self.plant_info[ATTR_STRAIN],
@@ -501,7 +508,7 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     config={
                         ATTR_NAME: self.plant_info[ATTR_NAME],
                         ATTR_STRAIN: self.plant_info[ATTR_STRAIN],
-                        ATTR_BREEDER: self.plant_info.get(ATTR_BREEDER, ""),
+                        ATTR_BREEDER: self._plantbook_breeder(),
                         ATTR_SENSORS: {},
                         "plant_emoji": self.plant_info.get("plant_emoji", ""),
                     }
@@ -603,6 +610,17 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             description_placeholders={"opb_search": self.plant_info.get(ATTR_STRAIN)},
         )
 
+    def _plantbook_breeder(self) -> str:
+        """Return the breeder term to look up with.
+
+        Prefers the term the user searched with, because that is the one
+        seedfinder's URL resolves; the breeder stored on the plant is the
+        display name from the result and may not resolve at all.
+        """
+        return getattr(self, "_breeder_query", None) or self.plant_info.get(
+            ATTR_BREEDER, ""
+        )
+
     async def async_step_limits(self, user_input=None):
         """Handle limits step."""
         # Get default values from OpenPlantbook
@@ -611,7 +629,7 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             config={
                 ATTR_NAME: self.plant_info[ATTR_NAME],
                 ATTR_STRAIN: self.plant_info[ATTR_STRAIN],
-                ATTR_BREEDER: self.plant_info.get(ATTR_BREEDER, ""),
+                ATTR_BREEDER: self._plantbook_breeder(),
                 ATTR_SENSORS: {},
                 "plant_emoji": self.plant_info.get("plant_emoji", ""),
             }
