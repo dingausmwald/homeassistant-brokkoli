@@ -154,6 +154,8 @@ from .const import (
     CONF_DEFAULT_MIN_POWER_CONSUMPTION,
     CONF_DEFAULT_MAX_PH,
     CONF_DEFAULT_MIN_PH,
+    DEFAULT_MAX_PH,
+    DEFAULT_MIN_PH,
     ATTR_KWH_PRICE,
     DEFAULT_KWH_PRICE,
     FLOW_DOWNLOAD_PATH,
@@ -1207,6 +1209,14 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Optional(
                     CONF_DEFAULT_MIN_POWER_CONSUMPTION,
                     default=self.entry.data[FLOW_PLANT_INFO].get(CONF_DEFAULT_MIN_POWER_CONSUMPTION, 0.0)
+                ): cv.positive_float,
+                vol.Optional(
+                    CONF_DEFAULT_MAX_PH,
+                    default=self.entry.data[FLOW_PLANT_INFO].get(CONF_DEFAULT_MAX_PH, DEFAULT_MAX_PH)
+                ): cv.positive_float,
+                vol.Optional(
+                    CONF_DEFAULT_MIN_PH,
+                    default=self.entry.data[FLOW_PLANT_INFO].get(CONF_DEFAULT_MIN_PH, DEFAULT_MIN_PH)
                 ): cv.positive_float,
                 vol.Optional(
                     "default_normalize_moisture",
