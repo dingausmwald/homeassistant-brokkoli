@@ -280,6 +280,16 @@ async def async_setup_entry(
                 total=total_power_consumption
             )
 
+            # Der Total-Power-Sensor ist der einzige Verbrauchs-Meter mit einem
+            # externen Quell-Sensor (PlantCurrentPowerConsumption rechnet nur
+            # daraus ab). Er muss deshalb mit in ATTR_SENSORS, sonst findet ihn
+            # der replace_sensor-Service nicht, lehnt ihn als "non-plant entity"
+            # ab und jede Zuweisung einer Stromverbrauchs-Quelle schlägt still
+            # fehl — nur bei diesem einen Sensortyp.
+            hass.data[DOMAIN][entry.entry_id].setdefault(ATTR_SENSORS, []).append(
+                total_power_consumption
+            )
+
     # Erstelle die Median-Sensoren für Cycles
     if plant.device_type == DEVICE_TYPE_CYCLE:
         cycle_sensors = []

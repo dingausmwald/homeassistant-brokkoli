@@ -199,7 +199,50 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 for meter in meters:
                     if meter.entity_id == meter_entity:
                         meter.replace_external_sensor(new_sensor)
+                        _persist_external_sensor(key, meter, new_sensor)
         return
+
+    def _persist_external_sensor(entry_id: str, meter, new_sensor: str | None) -> None:
+        """Die Zuweisung zusätzlich in der Config-Entry ablegen.
+
+        replace_external_sensor() ändert nur das Laufzeit-Objekt. Beim Start
+        setzt sensor.async_setup_entry die externen Sensoren aber erneut aus
+        entry.data[FLOW_PLANT_INFO] — und zwar NACH dem Restore aus dem letzten
+        Zustand. Ohne diesen Schritt ist deshalb jede über den Service (und
+        damit über die Sensor-Zuweisungs-Karte) gemachte Zuweisung nach dem
+        nächsten Neustart wieder weg. Der Options-Flow schreibt an genau
+        dieselbe Stelle.
+        """
+        plant = hass.data[DOMAIN][entry_id].get(ATTR_PLANT)
+        if plant is None:
+            return
+
+        sensor_mappings = {
+            FLOW_SENSOR_TEMPERATURE: plant.sensor_temperature,
+            FLOW_SENSOR_MOISTURE: plant.sensor_moisture,
+            FLOW_SENSOR_CONDUCTIVITY: plant.sensor_conductivity,
+            FLOW_SENSOR_ILLUMINANCE: plant.sensor_illuminance,
+            FLOW_SENSOR_HUMIDITY: plant.sensor_humidity,
+            FLOW_SENSOR_POWER_CONSUMPTION: plant.total_power_consumption,
+            FLOW_SENSOR_PH: plant.sensor_ph,
+        }
+        flow_key = next(
+            (k for k, sensor in sensor_mappings.items() if sensor is meter), None
+        )
+        if flow_key is None:
+            return
+
+        entry = hass.config_entries.async_get_entry(entry_id)
+        if entry is None:
+            return
+
+        data = dict(entry.data)
+        plant_info = dict(data.get(FLOW_PLANT_INFO, {}))
+        if plant_info.get(flow_key, "") == (new_sensor or ""):
+            return
+        plant_info[flow_key] = new_sensor or ""
+        data[FLOW_PLANT_INFO] = plant_info
+        hass.config_entries.async_update_entry(entry, data=data)
 
     async def remove_plant(call: ServiceCall) -> None:
         """Remove a plant entity and all its associated entities."""
