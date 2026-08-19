@@ -72,6 +72,7 @@ from .const import (
     FLOW_WATER_CONSUMPTION_TRIGGER,
     FLOW_FERTILIZER_CONSUMPTION_TRIGGER,
     FLOW_POWER_CONSUMPTION_TRIGGER,
+    FLOW_PH_TRIGGER,
     FLOW_SENSOR_TEMPERATURE,
     FLOW_SENSOR_MOISTURE,
     FLOW_SENSOR_CONDUCTIVITY,
@@ -813,6 +814,7 @@ class PlantDevice(RestoreEntity):
         self.water_consumption_status = None
         self.fertilizer_consumption_status = None
         self.power_consumption_status = None
+        self.ph_status = None
 
         self.flowering_duration = None
 
@@ -981,6 +983,11 @@ class PlantDevice(RestoreEntity):
         return self._config.options.get(FLOW_POWER_CONSUMPTION_TRIGGER, True)
 
     @property
+    def ph_trigger(self) -> bool:
+        """Return if pH should trigger problems."""
+        return self._config.options.get(FLOW_PH_TRIGGER, True)
+
+    @property
     def breeder(self) -> str:
         """Return the breeder."""
         return self._plant_info.get(ATTR_BREEDER, "")
@@ -1021,6 +1028,7 @@ class PlantDevice(RestoreEntity):
             "water_consumption_status": self.water_consumption_status,
             "fertilizer_consumption_status": self.fertilizer_consumption_status,
             "power_consumption_status": self.power_consumption_status,
+            "ph_status": self.ph_status,
             ATTR_PROBLEMS: self._problems,
             "pid": self.pid,
             "type": self._plant_info.get(ATTR_TYPE, ""),
@@ -1744,6 +1752,20 @@ class PlantDevice(RestoreEntity):
                             power_consumption, self.power_consumption_status, self.min_power_consumption, self.max_power_consumption
                         )
 
+            if self.sensor_ph is not None:
+                ph = self.sensor_ph.state
+                if ph is not None and ph != STATE_UNAVAILABLE and ph != STATE_UNKNOWN:
+                    known_state = True
+                    ph = float(ph)
+                    self.ph_status = self._check_threshold(
+                        ph, self.min_ph, self.max_ph, self.ph_status
+                    )
+                    if self.ph_status != STATE_OK and self.ph_trigger:
+                        new_state = STATE_PROBLEM
+                        _problem_sensors["ph"] = (
+                            ph, self.ph_status, self.min_ph, self.max_ph
+                        )
+
         else:
             # Plant-Update-Logik
             if self.sensor_moisture is not None:
@@ -1874,6 +1896,20 @@ class PlantDevice(RestoreEntity):
                         new_state = STATE_PROBLEM
                         _problem_sensors["power_consumption"] = (
                             power_consumption, self.power_consumption_status, self.min_power_consumption, self.max_power_consumption
+                        )
+
+            if self.sensor_ph is not None:
+                ph = self.sensor_ph.state
+                if ph is not None and ph != STATE_UNAVAILABLE and ph != STATE_UNKNOWN:
+                    known_state = True
+                    ph = float(ph)
+                    self.ph_status = self._check_threshold(
+                        ph, self.min_ph, self.max_ph, self.ph_status
+                    )
+                    if self.ph_status != STATE_OK and self.ph_trigger:
+                        new_state = STATE_PROBLEM
+                        _problem_sensors["ph"] = (
+                            ph, self.ph_status, self.min_ph, self.max_ph
                         )
 
         if not known_state:

@@ -101,6 +101,7 @@ from .const import (
     FLOW_WATER_CONSUMPTION_TRIGGER,
     FLOW_FERTILIZER_CONSUMPTION_TRIGGER,
     FLOW_POWER_CONSUMPTION_TRIGGER,
+    FLOW_PH_TRIGGER,
     OPB_DISPLAY_PID,
     DEFAULT_GROWTH_PHASE,
     GROWTH_PHASES,
@@ -1538,6 +1539,9 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Optional(
                     FLOW_POWER_CONSUMPTION_TRIGGER, default=self.plant.power_consumption_trigger
                 )
+            ] = cv.boolean
+            data_schema[
+                vol.Optional(FLOW_PH_TRIGGER, default=self.plant.ph_trigger)
             ] = cv.boolean
 
         return self.async_show_form(step_id="init", data_schema=vol.Schema(data_schema))
