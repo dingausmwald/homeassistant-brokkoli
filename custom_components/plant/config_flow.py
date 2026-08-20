@@ -54,6 +54,7 @@ from .const import (
     ATTR_STRAIN,
     ATTR_BREEDER,
     ATTR_BREEDER_QUERY,
+    ATTR_PID,
     CONF_MAX_CONDUCTIVITY,
     CONF_MAX_DLI,
     CONF_MAX_HUMIDITY,
@@ -1715,6 +1716,39 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                                     new_state=value,
                                     attributes=self.hass.states.get(set_entity_id).attributes,
                                 )
+
+                    # Bisher wurden nur Bild, Anzeigename und Grenzwerte
+                    # uebernommen -- alle Textfelder der Antwort wurden geholt
+                    # und wieder verworfen. Sie blieben damit auf dem Stand vom
+                    # Anlegen der Pflanze stehen, auch wenn seedfinder
+                    # inzwischen bessere Daten liefert.
+                    #
+                    # Bewusst als feste Liste: Felder, die seedfinder gar nicht
+                    # kennt (notes, phenotype, hunger, yield, difficulty,
+                    # Positionsdaten, Sensorzuweisungen, breeder_query), stehen
+                    # nicht in der Antwort und bleiben ohnehin unangetastet.
+                    # flowering_duration fehlt hier absichtlich: das ist die
+                    # laufende Einstellung der Pflanze, nicht der Sortenwert --
+                    # dafuer steht original_flowering_duration in der Liste.
+                    refreshable = (
+                        ATTR_STRAIN, ATTR_BREEDER, ATTR_PID, OPB_DISPLAY_PID,
+                        ATTR_ORIGINAL_FLOWERING_DURATION, "type", "feminized",
+                        "timestamp", "website", "infotext1", "infotext2",
+                        "effects", "smell", "taste", "lineage",
+                    )
+                    fresh = plant_config[FLOW_PLANT_INFO]
+                    data = dict(entry.data)
+                    plant_info = dict(data.get(FLOW_PLANT_INFO, {}))
+                    changed = False
+                    for key in refreshable:
+                        if key in fresh and fresh[key] != plant_info.get(key):
+                            plant_info[key] = fresh[key]
+                            changed = True
+                    if changed:
+                        data[FLOW_PLANT_INFO] = plant_info
+                        hass.config_entries.async_update_entry(entry, data=data)
+                        self.plant._plant_info = plant_info
+                        self.plant.async_write_ha_state()
             finally:
                 options = dict(entry.options)
                 options[FLOW_FORCE_SPECIES_UPDATE] = False
