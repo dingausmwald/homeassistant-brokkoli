@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import os
 from datetime import datetime
 
@@ -449,7 +450,16 @@ async def ws_upload_image(
                 breeder = target_entity._plant_info.get(ATTR_BREEDER, "Unknown")
                 strain = target_entity._plant_info.get(ATTR_STRAIN, "Unknown")
                 _, ext = os.path.splitext(filename)
-                final_filename = f"{breeder}_{strain}{ext}".replace(" ", "_")
+                # Only spaces used to be replaced. A strain like "GG #4" then
+                # produced "Zamnesia_GG_#4.jpg" -- fine on disk, but the '#'
+                # starts the fragment in the /local/ URL below, so the picture
+                # is unreachable. Seedfinder writes "Nr" for '#'; follow that
+                # and drop anything else that is not URL-safe.
+                def _safe(part: str) -> str:
+                    part = str(part or "").replace("#", "Nr")
+                    return re.sub(r"[^A-Za-z0-9._-]+", "_", part).strip("_") or "Unknown"
+
+                final_filename = f"{_safe(breeder)}_{_safe(strain)}{ext}"
                 
                 # Hole die aktuelle Bilderliste aus der Config Entry
                 data = dict(target_entry.data)
