@@ -1515,6 +1515,15 @@ class PlantDevice(RestoreEntity):
         """Füge die Blütedauer Number Entity hinzu."""
         self.flowering_duration = flowering_duration
 
+    def _sensor_assigned(self, sensor) -> bool:
+        """True when an external source sensor is assigned to this reading.
+
+        Without one the internal entity still reports its default value, which
+        would be checked against the thresholds and flagged as a problem the
+        plant does not have.
+        """
+        return bool(getattr(sensor, "external_sensor", None))
+
     def _check_threshold(self, value, min_entity, max_entity, current_status):
         """Check a value against min/max thresholds with hysteresis.
 
@@ -1768,7 +1777,7 @@ class PlantDevice(RestoreEntity):
 
         else:
             # Plant-Update-Logik
-            if self.sensor_moisture is not None:
+            if self._sensor_assigned(self.sensor_moisture):
                 moisture = self.sensor_moisture.state
                 if moisture is not None and moisture != STATE_UNAVAILABLE and moisture != STATE_UNKNOWN:
                     known_state = True
@@ -1782,7 +1791,7 @@ class PlantDevice(RestoreEntity):
                             moisture, self.moisture_status, self.min_moisture, self.max_moisture
                         )
 
-            if self.sensor_conductivity is not None:
+            if self._sensor_assigned(self.sensor_conductivity):
                 conductivity = self.sensor_conductivity.state
                 if conductivity is not None and conductivity != STATE_UNAVAILABLE and conductivity != STATE_UNKNOWN:
                     known_state = True
@@ -1797,7 +1806,7 @@ class PlantDevice(RestoreEntity):
                         )
 
             # Füge die fehlenden Sensor-Prüfungen hinzu
-            if self.sensor_temperature is not None:
+            if self._sensor_assigned(self.sensor_temperature):
                 temperature = self.sensor_temperature.state
                 if temperature is not None and temperature != STATE_UNAVAILABLE and temperature != STATE_UNKNOWN:
                     known_state = True
@@ -1811,7 +1820,7 @@ class PlantDevice(RestoreEntity):
                             temperature, self.temperature_status, self.min_temperature, self.max_temperature
                         )
 
-            if self.sensor_illuminance is not None:
+            if self._sensor_assigned(self.sensor_illuminance):
                 illuminance = self.sensor_illuminance.state
                 if illuminance is not None and illuminance != STATE_UNAVAILABLE and illuminance != STATE_UNKNOWN:
                     known_state = True
@@ -1825,7 +1834,7 @@ class PlantDevice(RestoreEntity):
                             illuminance, self.illuminance_status, self.min_illuminance, self.max_illuminance
                         )
 
-            if self.sensor_humidity is not None:
+            if self._sensor_assigned(self.sensor_humidity):
                 humidity = self.sensor_humidity.state
                 if humidity is not None and humidity != STATE_UNAVAILABLE and humidity != STATE_UNKNOWN:
                     known_state = True
@@ -1884,7 +1893,7 @@ class PlantDevice(RestoreEntity):
                         )
 
             # Überprüfe Power Consumption
-            if self.sensor_power_consumption is not None:
+            if self.sensor_power_consumption is not None and self._sensor_assigned(self.total_power_consumption):
                 power_consumption = self.sensor_power_consumption.state
                 if power_consumption is not None and power_consumption != STATE_UNAVAILABLE and power_consumption != STATE_UNKNOWN:
                     known_state = True
@@ -1898,7 +1907,7 @@ class PlantDevice(RestoreEntity):
                             power_consumption, self.power_consumption_status, self.min_power_consumption, self.max_power_consumption
                         )
 
-            if self.sensor_ph is not None:
+            if self._sensor_assigned(self.sensor_ph):
                 ph = self.sensor_ph.state
                 if ph is not None and ph != STATE_UNAVAILABLE and ph != STATE_UNKNOWN:
                     known_state = True
