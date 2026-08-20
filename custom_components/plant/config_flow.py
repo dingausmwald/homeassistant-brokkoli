@@ -1666,60 +1666,65 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         force_new_strain = entry.options.get(FLOW_FORCE_SPECIES_UPDATE)
         
         if new_strain is not None and force_new_strain:
-            _LOGGER.debug("Updating strain to: %s", new_strain)
-            plant_helper = PlantHelper(hass=self.hass)
-            # Ohne Zuechter lehnt seedfinder den Aufruf sofort ab. Bevorzugt den
-            # Begriff, der beim Anlegen aufgeloest hat -- der auf der Pflanze
-            # gespeicherte ist der Anzeigename und fuehrt zu einem 404.
-            breeder = (
-                self.plant._plant_info.get(ATTR_BREEDER_QUERY)
-                or self.plant._plant_info.get(ATTR_BREEDER, "")
-            )
-            # Das Strain-Feld der Optionen ist mit der pid vorbelegt, nicht mit
-            # der Sorte -- danach zu suchen findet nie etwas. Fuer die Abfrage
-            # daher die auf der Pflanze gespeicherte Sorte nehmen.
-            # ATTR_NAME muss mit: schlaegt die Abfrage fehl, faellt
-            # generate_configentry in den Basis-Zweig und liest config[ATTR_NAME].
-            lookup_strain = self.plant._plant_info.get(ATTR_STRAIN) or new_strain
-            plant_config = await plant_helper.generate_configentry(
-                config={
-                    ATTR_NAME: self.plant.name,
-                    ATTR_STRAIN: lookup_strain,
-                    ATTR_BREEDER: breeder,
-                    ATTR_ENTITY_PICTURE: entity_picture,
-                    OPB_DISPLAY_PID: new_display_strain,
-                    FLOW_FORCE_SPECIES_UPDATE: force_new_strain,
-                }
-            )
+            # Der Reset MUSS laufen, auch wenn die Abfrage fliegt. Bleibt
+            # force_update sonst auf true, ergibt ein erneutes Setzen des
+            # Hakens identische Options -- Home Assistant ueberspringt das
+            # Schreiben, dieser Listener feuert nie wieder, und der Haken
+            # ist dauerhaft wirkungslos, ohne dass ein Fehler erscheint.
+            try:
+                _LOGGER.debug("Updating strain to: %s", new_strain)
+                plant_helper = PlantHelper(hass=self.hass)
+                # Ohne Zuechter lehnt seedfinder den Aufruf sofort ab. Bevorzugt den
+                # Begriff, der beim Anlegen aufgeloest hat -- der auf der Pflanze
+                # gespeicherte ist der Anzeigename und fuehrt zu einem 404.
+                breeder = (
+                    self.plant._plant_info.get(ATTR_BREEDER_QUERY)
+                    or self.plant._plant_info.get(ATTR_BREEDER, "")
+                )
+                # Das Strain-Feld der Optionen ist mit der pid vorbelegt, nicht mit
+                # der Sorte -- danach zu suchen findet nie etwas. Fuer die Abfrage
+                # daher die auf der Pflanze gespeicherte Sorte nehmen.
+                # ATTR_NAME muss mit: schlaegt die Abfrage fehl, faellt
+                # generate_configentry in den Basis-Zweig und liest config[ATTR_NAME].
+                lookup_strain = self.plant._plant_info.get(ATTR_STRAIN) or new_strain
+                plant_config = await plant_helper.generate_configentry(
+                    config={
+                        ATTR_NAME: self.plant.name,
+                        ATTR_STRAIN: lookup_strain,
+                        ATTR_BREEDER: breeder,
+                        ATTR_ENTITY_PICTURE: entity_picture,
+                        OPB_DISPLAY_PID: new_display_strain,
+                        FLOW_FORCE_SPECIES_UPDATE: force_new_strain,
+                    }
+                )
 
-            # generate_configentry legt alles unter FLOW_PLANT_INFO ab. Die
-            # Pruefung sah eine Ebene zu hoch nach und war deshalb immer None --
-            # der ganze Block darunter lief nie.
-            if plant_config.get(FLOW_PLANT_INFO, {}).get(DATA_SOURCE) == DATA_SOURCE_PLANTBOOK:
-                # Update plant info
-                self.plant.add_image(plant_config[FLOW_PLANT_INFO][ATTR_ENTITY_PICTURE])
-                self.plant.display_strain = plant_config[FLOW_PLANT_INFO][OPB_DISPLAY_PID]
+                # generate_configentry legt alles unter FLOW_PLANT_INFO ab. Die
+                # Pruefung sah eine Ebene zu hoch nach und war deshalb immer None --
+                # der ganze Block darunter lief nie.
+                if plant_config.get(FLOW_PLANT_INFO, {}).get(DATA_SOURCE) == DATA_SOURCE_PLANTBOOK:
+                    # Update plant info
+                    self.plant.add_image(plant_config[FLOW_PLANT_INFO][ATTR_ENTITY_PICTURE])
+                    self.plant.display_strain = plant_config[FLOW_PLANT_INFO][OPB_DISPLAY_PID]
                 
-                # Update thresholds
-                if FLOW_PLANT_LIMITS in plant_config[FLOW_PLANT_INFO]:
-                    for key, value in plant_config[FLOW_PLANT_INFO][FLOW_PLANT_LIMITS].items():
-                        set_entity = getattr(self.plant, key, None)
-                        if set_entity:
-                            set_entity_id = set_entity.entity_id
-                            _LOGGER.debug("Setting %s to %s", set_entity_id, value)
-                            self.hass.states.async_set(
-                                set_entity_id,
-                                new_state=value,
-                                attributes=self.hass.states.get(set_entity_id).attributes,
-                            )
-
-            # Reset force update flag
-            options = dict(entry.options)
-            options[FLOW_FORCE_SPECIES_UPDATE] = False
-            options[OPB_DISPLAY_PID] = self.plant.display_strain
-            options[ATTR_ENTITY_PICTURE] = self.plant.entity_picture
+                    # Update thresholds
+                    if FLOW_PLANT_LIMITS in plant_config[FLOW_PLANT_INFO]:
+                        for key, value in plant_config[FLOW_PLANT_INFO][FLOW_PLANT_LIMITS].items():
+                            set_entity = getattr(self.plant, key, None)
+                            if set_entity:
+                                set_entity_id = set_entity.entity_id
+                                _LOGGER.debug("Setting %s to %s", set_entity_id, value)
+                                self.hass.states.async_set(
+                                    set_entity_id,
+                                    new_state=value,
+                                    attributes=self.hass.states.get(set_entity_id).attributes,
+                                )
+            finally:
+                options = dict(entry.options)
+                options[FLOW_FORCE_SPECIES_UPDATE] = False
+                options[OPB_DISPLAY_PID] = self.plant.display_strain
+                options[ATTR_ENTITY_PICTURE] = self.plant.entity_picture
             
-            hass.config_entries.async_update_entry(entry, options=options)
+                hass.config_entries.async_update_entry(entry, options=options)
 
         _LOGGER.debug("Update plant options done for %s", entry.entry_id)
         self.plant.update_registry()
