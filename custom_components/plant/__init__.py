@@ -1565,6 +1565,21 @@ class PlantDevice(RestoreEntity):
         """
         return bool(getattr(sensor, "external_sensor", None))
 
+    def _any_sensor_assigned(self) -> bool:
+        """True when at least one source sensor is assigned to this plant."""
+        return any(
+            self._sensor_assigned(sensor)
+            for sensor in (
+                self.sensor_moisture,
+                self.sensor_temperature,
+                self.sensor_conductivity,
+                self.sensor_illuminance,
+                self.sensor_humidity,
+                self.sensor_ph,
+                self.total_power_consumption,
+            )
+        )
+
     def _check_threshold(self, value, min_entity, max_entity, current_status):
         """Check a value against min/max thresholds with hysteresis.
 
@@ -1993,7 +2008,13 @@ class PlantDevice(RestoreEntity):
                 self.ph_status = None
 
         if not known_state:
-            new_state = STATE_UNKNOWN
+            # Unknown is only right when a sensor exists but has not reported
+            # yet. A plant without any assigned sensor has nothing that could
+            # be wrong, so it stays ok.
+            if self.device_type != DEVICE_TYPE_CYCLE and not self._any_sensor_assigned():
+                new_state = STATE_OK
+            else:
+                new_state = STATE_UNKNOWN
 
         self._attr_state = new_state
 
