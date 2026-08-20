@@ -177,7 +177,17 @@
           "default_total_fertilizer_consumption_aggregation": "Default total fertilizer consumption aggregation",
           "default_total_power_consumption_aggregation": "Default total power consumption aggregation",
           "default_health_aggregation": "Default health aggregation",
-          "default_ph_aggregation": "Default pH aggregation"
+          "default_ph_aggregation": "Default pH aggregation",
+          "default_illuminance_trigger": "Use illuminance as a problem trigger by default",
+          "default_humidity_trigger": "Use humidity as a problem trigger by default",
+          "default_temperature_trigger": "Use temperature as a problem trigger by default",
+          "default_dli_trigger": "Use DLI as a problem trigger by default",
+          "default_moisture_trigger": "Use soil moisture as a problem trigger by default",
+          "default_conductivity_trigger": "Use conductivity as a problem trigger by default",
+          "default_water_consumption_trigger": "Use water consumption as a problem trigger by default",
+          "default_fertilizer_consumption_trigger": "Use fertilizer consumption as a problem trigger by default",
+          "default_power_consumption_trigger": "Use power consumption as a problem trigger by default",
+          "default_ph_trigger": "Use pH as a problem trigger by default"
         }
       }
     }

@@ -417,6 +417,18 @@ CONF_DEFAULT_MAX_POWER_CONSUMPTION = "default_max_power_consumption"
 CONF_DEFAULT_MAX_PH = "default_max_ph"  # Neue Konstanten für pH
 CONF_DEFAULT_MIN_PH = "default_min_ph"
 
+# Defaults for the problem triggers, configurable on the configuration node
+CONF_DEFAULT_ILLUMINANCE_TRIGGER = "default_illuminance_trigger"
+CONF_DEFAULT_HUMIDITY_TRIGGER = "default_humidity_trigger"
+CONF_DEFAULT_TEMPERATURE_TRIGGER = "default_temperature_trigger"
+CONF_DEFAULT_DLI_TRIGGER = "default_dli_trigger"
+CONF_DEFAULT_MOISTURE_TRIGGER = "default_moisture_trigger"
+CONF_DEFAULT_CONDUCTIVITY_TRIGGER = "default_conductivity_trigger"
+CONF_DEFAULT_WATER_CONSUMPTION_TRIGGER = "default_water_consumption_trigger"
+CONF_DEFAULT_FERTILIZER_CONSUMPTION_TRIGGER = "default_fertilizer_consumption_trigger"
+CONF_DEFAULT_POWER_CONSUMPTION_TRIGGER = "default_power_consumption_trigger"
+CONF_DEFAULT_PH_TRIGGER = "default_ph_trigger"
+
 ATTR_WATER_CONSUMPTION = "water_consumption"
 ATTR_FERTILIZER_CONSUMPTION = "fertilizer_consumption"
 ATTR_POWER_CONSUMPTION = "power_consumption"

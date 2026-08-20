@@ -73,6 +73,16 @@ from .const import (
     FLOW_FERTILIZER_CONSUMPTION_TRIGGER,
     FLOW_POWER_CONSUMPTION_TRIGGER,
     FLOW_PH_TRIGGER,
+    CONF_DEFAULT_ILLUMINANCE_TRIGGER,
+    CONF_DEFAULT_HUMIDITY_TRIGGER,
+    CONF_DEFAULT_TEMPERATURE_TRIGGER,
+    CONF_DEFAULT_DLI_TRIGGER,
+    CONF_DEFAULT_MOISTURE_TRIGGER,
+    CONF_DEFAULT_CONDUCTIVITY_TRIGGER,
+    CONF_DEFAULT_WATER_CONSUMPTION_TRIGGER,
+    CONF_DEFAULT_FERTILIZER_CONSUMPTION_TRIGGER,
+    CONF_DEFAULT_POWER_CONSUMPTION_TRIGGER,
+    CONF_DEFAULT_PH_TRIGGER,
     FLOW_SENSOR_TEMPERATURE,
     FLOW_SENSOR_MOISTURE,
     FLOW_SENSOR_CONDUCTIVITY,
@@ -937,55 +947,86 @@ class PlantDevice(RestoreEntity):
             configuration_url=self.website if self.website else None,
         )
 
+    def _default_trigger(self, key: str, fallback: bool) -> bool:
+        """Read a problem-trigger default from the configuration node.
+
+        A plant only carries an explicit value once it has been changed in its
+        own options; until then the globally configured default applies.
+        """
+        for entry in self._hass.config_entries.async_entries(DOMAIN):
+            if entry.data.get("is_config", False):
+                return entry.data.get(FLOW_PLANT_INFO, {}).get(key, fallback)
+        return fallback
+
     @property
     def illuminance_trigger(self) -> bool:
         """Whether we will generate alarms based on illuminance"""
-        return self._config.options.get(FLOW_ILLUMINANCE_TRIGGER, True)
+        return self._config.options.get(
+            FLOW_ILLUMINANCE_TRIGGER, self._default_trigger(CONF_DEFAULT_ILLUMINANCE_TRIGGER, True)
+        )
 
     @property
     def humidity_trigger(self) -> bool:
         """Whether we will generate alarms based on humidity"""
-        return self._config.options.get(FLOW_HUMIDITY_TRIGGER, True)
+        return self._config.options.get(
+            FLOW_HUMIDITY_TRIGGER, self._default_trigger(CONF_DEFAULT_HUMIDITY_TRIGGER, True)
+        )
 
     @property
     def temperature_trigger(self) -> bool:
         """Whether we will generate alarms based on temperature"""
-        return self._config.options.get(FLOW_TEMPERATURE_TRIGGER, True)
+        return self._config.options.get(
+            FLOW_TEMPERATURE_TRIGGER, self._default_trigger(CONF_DEFAULT_TEMPERATURE_TRIGGER, True)
+        )
 
     @property
     def dli_trigger(self) -> bool:
         """Whether we will generate alarms based on dli"""
-        return self._config.options.get(FLOW_DLI_TRIGGER, True)
+        return self._config.options.get(
+            FLOW_DLI_TRIGGER, self._default_trigger(CONF_DEFAULT_DLI_TRIGGER, False)
+        )
 
     @property
     def moisture_trigger(self) -> bool:
         """Whether we will generate alarms based on moisture"""
-        return self._config.options.get(FLOW_MOISTURE_TRIGGER, True)
+        return self._config.options.get(
+            FLOW_MOISTURE_TRIGGER, self._default_trigger(CONF_DEFAULT_MOISTURE_TRIGGER, True)
+        )
 
     @property
     def conductivity_trigger(self) -> bool:
         """Whether we will generate alarms based on conductivity"""
-        return self._config.options.get(FLOW_CONDUCTIVITY_TRIGGER, True)
+        return self._config.options.get(
+            FLOW_CONDUCTIVITY_TRIGGER, self._default_trigger(CONF_DEFAULT_CONDUCTIVITY_TRIGGER, True)
+        )
 
     @property
     def water_consumption_trigger(self) -> bool:
         """Whether we will generate alarms based on water consumption"""
-        return self._config.options.get(FLOW_WATER_CONSUMPTION_TRIGGER, True)
+        return self._config.options.get(
+            FLOW_WATER_CONSUMPTION_TRIGGER, self._default_trigger(CONF_DEFAULT_WATER_CONSUMPTION_TRIGGER, True)
+        )
 
     @property
     def fertilizer_consumption_trigger(self) -> bool:
         """Whether we will generate alarms based on fertilizer consumption"""
-        return self._config.options.get(FLOW_FERTILIZER_CONSUMPTION_TRIGGER, True)
+        return self._config.options.get(
+            FLOW_FERTILIZER_CONSUMPTION_TRIGGER, self._default_trigger(CONF_DEFAULT_FERTILIZER_CONSUMPTION_TRIGGER, True)
+        )
 
     @property
     def power_consumption_trigger(self) -> bool:
         """Return if power consumption should trigger problems."""
-        return self._config.options.get(FLOW_POWER_CONSUMPTION_TRIGGER, True)
+        return self._config.options.get(
+            FLOW_POWER_CONSUMPTION_TRIGGER, self._default_trigger(CONF_DEFAULT_POWER_CONSUMPTION_TRIGGER, True)
+        )
 
     @property
     def ph_trigger(self) -> bool:
         """Return if pH should trigger problems."""
-        return self._config.options.get(FLOW_PH_TRIGGER, True)
+        return self._config.options.get(
+            FLOW_PH_TRIGGER, self._default_trigger(CONF_DEFAULT_PH_TRIGGER, True)
+        )
 
     @property
     def breeder(self) -> str:
@@ -1790,6 +1831,9 @@ class PlantDevice(RestoreEntity):
                         _problem_sensors["moisture"] = (
                             moisture, self.moisture_status, self.min_moisture, self.max_moisture
                         )
+            else:
+                # No source sensor -> no reading, and therefore no status.
+                self.moisture_status = None
 
             if self._sensor_assigned(self.sensor_conductivity):
                 conductivity = self.sensor_conductivity.state
@@ -1804,6 +1848,9 @@ class PlantDevice(RestoreEntity):
                         _problem_sensors["conductivity"] = (
                             conductivity, self.conductivity_status, self.min_conductivity, self.max_conductivity
                         )
+            else:
+                # No source sensor -> no reading, and therefore no status.
+                self.conductivity_status = None
 
             # Füge die fehlenden Sensor-Prüfungen hinzu
             if self._sensor_assigned(self.sensor_temperature):
@@ -1819,6 +1866,9 @@ class PlantDevice(RestoreEntity):
                         _problem_sensors["temperature"] = (
                             temperature, self.temperature_status, self.min_temperature, self.max_temperature
                         )
+            else:
+                # No source sensor -> no reading, and therefore no status.
+                self.temperature_status = None
 
             if self._sensor_assigned(self.sensor_illuminance):
                 illuminance = self.sensor_illuminance.state
@@ -1833,6 +1883,9 @@ class PlantDevice(RestoreEntity):
                         _problem_sensors["illuminance"] = (
                             illuminance, self.illuminance_status, self.min_illuminance, self.max_illuminance
                         )
+            else:
+                # No source sensor -> no reading, and therefore no status.
+                self.illuminance_status = None
 
             if self._sensor_assigned(self.sensor_humidity):
                 humidity = self.sensor_humidity.state
@@ -1847,8 +1900,11 @@ class PlantDevice(RestoreEntity):
                         _problem_sensors["humidity"] = (
                             humidity, self.humidity_status, self.min_humidity, self.max_humidity
                         )
+            else:
+                # No source sensor -> no reading, and therefore no status.
+                self.humidity_status = None
 
-            if self.dli is not None:
+            if self.dli is not None and self._sensor_assigned(self.sensor_illuminance):
                 dli = self.dli.state
                 if dli is not None and dli != STATE_UNAVAILABLE and dli != STATE_UNKNOWN:
                     known_state = True
@@ -1861,9 +1917,12 @@ class PlantDevice(RestoreEntity):
                         _problem_sensors["dli"] = (
                             dli, self.dli_status, self.min_dli, self.max_dli
                         )
+            else:
+                # No source sensor -> no reading, and therefore no status.
+                self.dli_status = None
 
             # Überprüfe Wasser-Verbrauch
-            if self.moisture_consumption is not None:
+            if self.moisture_consumption is not None and self._sensor_assigned(self.sensor_moisture):
                 water_consumption = self.moisture_consumption.state
                 if water_consumption is not None and water_consumption != STATE_UNAVAILABLE and water_consumption != STATE_UNKNOWN:
                     known_state = True
@@ -1876,9 +1935,12 @@ class PlantDevice(RestoreEntity):
                         _problem_sensors["water_consumption"] = (
                             water_consumption, self.water_consumption_status, self.min_water_consumption, self.max_water_consumption
                         )
+            else:
+                # No source sensor -> no reading, and therefore no status.
+                self.water_consumption_status = None
 
             # Überprüfe Dünger-Verbrauch
-            if self.fertilizer_consumption is not None:
+            if self.fertilizer_consumption is not None and self._sensor_assigned(self.sensor_conductivity):
                 fertilizer_consumption = self.fertilizer_consumption.state
                 if fertilizer_consumption is not None and fertilizer_consumption != STATE_UNAVAILABLE and fertilizer_consumption != STATE_UNKNOWN:
                     known_state = True
@@ -1891,6 +1953,9 @@ class PlantDevice(RestoreEntity):
                         _problem_sensors["fertilizer_consumption"] = (
                             fertilizer_consumption, self.fertilizer_consumption_status, self.min_fertilizer_consumption, self.max_fertilizer_consumption
                         )
+            else:
+                # No source sensor -> no reading, and therefore no status.
+                self.fertilizer_consumption_status = None
 
             # Überprüfe Power Consumption
             if self.sensor_power_consumption is not None and self._sensor_assigned(self.total_power_consumption):
@@ -1906,6 +1971,9 @@ class PlantDevice(RestoreEntity):
                         _problem_sensors["power_consumption"] = (
                             power_consumption, self.power_consumption_status, self.min_power_consumption, self.max_power_consumption
                         )
+            else:
+                # No source sensor -> no reading, and therefore no status.
+                self.power_consumption_status = None
 
             if self._sensor_assigned(self.sensor_ph):
                 ph = self.sensor_ph.state
@@ -1920,6 +1988,9 @@ class PlantDevice(RestoreEntity):
                         _problem_sensors["ph"] = (
                             ph, self.ph_status, self.min_ph, self.max_ph
                         )
+            else:
+                # No source sensor -> no reading, and therefore no status.
+                self.ph_status = None
 
         if not known_state:
             new_state = STATE_UNKNOWN

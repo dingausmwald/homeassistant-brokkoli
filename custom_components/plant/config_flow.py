@@ -156,6 +156,16 @@ from .const import (
     CONF_DEFAULT_MAX_PH,
     CONF_DEFAULT_MIN_PH,
     DEFAULT_MAX_PH,
+    CONF_DEFAULT_ILLUMINANCE_TRIGGER,
+    CONF_DEFAULT_HUMIDITY_TRIGGER,
+    CONF_DEFAULT_TEMPERATURE_TRIGGER,
+    CONF_DEFAULT_DLI_TRIGGER,
+    CONF_DEFAULT_MOISTURE_TRIGGER,
+    CONF_DEFAULT_CONDUCTIVITY_TRIGGER,
+    CONF_DEFAULT_WATER_CONSUMPTION_TRIGGER,
+    CONF_DEFAULT_FERTILIZER_CONSUMPTION_TRIGGER,
+    CONF_DEFAULT_POWER_CONSUMPTION_TRIGGER,
+    CONF_DEFAULT_PH_TRIGGER,
     DEFAULT_MIN_PH,
     ATTR_KWH_PRICE,
     DEFAULT_KWH_PRICE,
@@ -233,6 +243,16 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_DEFAULT_MIN_POWER_CONSUMPTION: 0.0,
                     CONF_DEFAULT_MAX_PH: 7.5,
                     CONF_DEFAULT_MIN_PH: 5.5,
+                    CONF_DEFAULT_ILLUMINANCE_TRIGGER: True,
+                    CONF_DEFAULT_HUMIDITY_TRIGGER: True,
+                    CONF_DEFAULT_TEMPERATURE_TRIGGER: True,
+                    CONF_DEFAULT_DLI_TRIGGER: False,
+                    CONF_DEFAULT_MOISTURE_TRIGGER: True,
+                    CONF_DEFAULT_CONDUCTIVITY_TRIGGER: True,
+                    CONF_DEFAULT_WATER_CONSUMPTION_TRIGGER: True,
+                    CONF_DEFAULT_FERTILIZER_CONSUMPTION_TRIGGER: True,
+                    CONF_DEFAULT_POWER_CONSUMPTION_TRIGGER: True,
+                    CONF_DEFAULT_PH_TRIGGER: True,
                     # Füge kWh Preis hinzu
                     ATTR_KWH_PRICE: DEFAULT_KWH_PRICE,
                     # Default Icon für Cycle
@@ -1012,6 +1032,16 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     CONF_DEFAULT_MIN_POWER_CONSUMPTION: CONF_DEFAULT_MIN_POWER_CONSUMPTION,
                     CONF_DEFAULT_MAX_PH: CONF_DEFAULT_MAX_PH,
                     CONF_DEFAULT_MIN_PH: CONF_DEFAULT_MIN_PH,
+                    CONF_DEFAULT_ILLUMINANCE_TRIGGER: CONF_DEFAULT_ILLUMINANCE_TRIGGER,
+                    CONF_DEFAULT_HUMIDITY_TRIGGER: CONF_DEFAULT_HUMIDITY_TRIGGER,
+                    CONF_DEFAULT_TEMPERATURE_TRIGGER: CONF_DEFAULT_TEMPERATURE_TRIGGER,
+                    CONF_DEFAULT_DLI_TRIGGER: CONF_DEFAULT_DLI_TRIGGER,
+                    CONF_DEFAULT_MOISTURE_TRIGGER: CONF_DEFAULT_MOISTURE_TRIGGER,
+                    CONF_DEFAULT_CONDUCTIVITY_TRIGGER: CONF_DEFAULT_CONDUCTIVITY_TRIGGER,
+                    CONF_DEFAULT_WATER_CONSUMPTION_TRIGGER: CONF_DEFAULT_WATER_CONSUMPTION_TRIGGER,
+                    CONF_DEFAULT_FERTILIZER_CONSUMPTION_TRIGGER: CONF_DEFAULT_FERTILIZER_CONSUMPTION_TRIGGER,
+                    CONF_DEFAULT_POWER_CONSUMPTION_TRIGGER: CONF_DEFAULT_POWER_CONSUMPTION_TRIGGER,
+                    CONF_DEFAULT_PH_TRIGGER: CONF_DEFAULT_PH_TRIGGER,
                     # Cycle-spezifische Defaults
                     "default_cycle_icon": "default_cycle_icon",
                     "default_growth_phase_aggregation": "default_growth_phase_aggregation",
@@ -1237,6 +1267,46 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     CONF_DEFAULT_MIN_PH,
                     default=self.entry.data[FLOW_PLANT_INFO].get(CONF_DEFAULT_MIN_PH, DEFAULT_MIN_PH)
                 ): cv.positive_float,
+                vol.Optional(
+                    CONF_DEFAULT_ILLUMINANCE_TRIGGER,
+                    default=self.entry.data[FLOW_PLANT_INFO].get(CONF_DEFAULT_ILLUMINANCE_TRIGGER, True)
+                ): cv.boolean,
+                vol.Optional(
+                    CONF_DEFAULT_HUMIDITY_TRIGGER,
+                    default=self.entry.data[FLOW_PLANT_INFO].get(CONF_DEFAULT_HUMIDITY_TRIGGER, True)
+                ): cv.boolean,
+                vol.Optional(
+                    CONF_DEFAULT_TEMPERATURE_TRIGGER,
+                    default=self.entry.data[FLOW_PLANT_INFO].get(CONF_DEFAULT_TEMPERATURE_TRIGGER, True)
+                ): cv.boolean,
+                vol.Optional(
+                    CONF_DEFAULT_DLI_TRIGGER,
+                    default=self.entry.data[FLOW_PLANT_INFO].get(CONF_DEFAULT_DLI_TRIGGER, False)
+                ): cv.boolean,
+                vol.Optional(
+                    CONF_DEFAULT_MOISTURE_TRIGGER,
+                    default=self.entry.data[FLOW_PLANT_INFO].get(CONF_DEFAULT_MOISTURE_TRIGGER, True)
+                ): cv.boolean,
+                vol.Optional(
+                    CONF_DEFAULT_CONDUCTIVITY_TRIGGER,
+                    default=self.entry.data[FLOW_PLANT_INFO].get(CONF_DEFAULT_CONDUCTIVITY_TRIGGER, True)
+                ): cv.boolean,
+                vol.Optional(
+                    CONF_DEFAULT_WATER_CONSUMPTION_TRIGGER,
+                    default=self.entry.data[FLOW_PLANT_INFO].get(CONF_DEFAULT_WATER_CONSUMPTION_TRIGGER, True)
+                ): cv.boolean,
+                vol.Optional(
+                    CONF_DEFAULT_FERTILIZER_CONSUMPTION_TRIGGER,
+                    default=self.entry.data[FLOW_PLANT_INFO].get(CONF_DEFAULT_FERTILIZER_CONSUMPTION_TRIGGER, True)
+                ): cv.boolean,
+                vol.Optional(
+                    CONF_DEFAULT_POWER_CONSUMPTION_TRIGGER,
+                    default=self.entry.data[FLOW_PLANT_INFO].get(CONF_DEFAULT_POWER_CONSUMPTION_TRIGGER, True)
+                ): cv.boolean,
+                vol.Optional(
+                    CONF_DEFAULT_PH_TRIGGER,
+                    default=self.entry.data[FLOW_PLANT_INFO].get(CONF_DEFAULT_PH_TRIGGER, True)
+                ): cv.boolean,
                 vol.Optional(
                     "default_normalize_moisture",
                     default=self.entry.data[FLOW_PLANT_INFO].get("default_normalize_moisture", False)

@@ -177,7 +177,17 @@
           "default_total_fertilizer_consumption_aggregation": "Standard-Aggregation Gesamt-Düngerverbrauch",
           "default_total_power_consumption_aggregation": "Standard-Aggregation Gesamt-Stromverbrauch",
           "default_health_aggregation": "Standard-Aggregation Gesundheit",
-          "default_ph_aggregation": "Standard-Aggregation pH"
+          "default_ph_aggregation": "Standard-Aggregation pH",
+          "default_illuminance_trigger": "Standard: Beleuchtungsstärke als Problemauslöser verwenden",
+          "default_humidity_trigger": "Standard: Luftfeuchtigkeit als Problemauslöser verwenden",
+          "default_temperature_trigger": "Standard: Temperatur als Problemauslöser verwenden",
+          "default_dli_trigger": "Standard: DLI als Problemauslöser verwenden",
+          "default_moisture_trigger": "Standard: Bodenfeuchte als Problemauslöser verwenden",
+          "default_conductivity_trigger": "Standard: Leitfähigkeit als Problemauslöser verwenden",
+          "default_water_consumption_trigger": "Standard: Wasserverbrauch als Problemauslöser verwenden",
+          "default_fertilizer_consumption_trigger": "Standard: Düngerverbrauch als Problemauslöser verwenden",
+          "default_power_consumption_trigger": "Standard: Stromverbrauch als Problemauslöser verwenden",
+          "default_ph_trigger": "Standard: pH als Problemauslöser verwenden"
         }
       }
     }
