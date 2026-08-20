@@ -1674,13 +1674,10 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             try:
                 _LOGGER.debug("Updating strain to: %s", new_strain)
                 plant_helper = PlantHelper(hass=self.hass)
-                # Ohne Zuechter lehnt seedfinder den Aufruf sofort ab. Bevorzugt den
-                # Begriff, der beim Anlegen aufgeloest hat -- der auf der Pflanze
-                # gespeicherte ist der Anzeigename und fuehrt zu einem 404.
-                breeder = (
-                    self.plant._plant_info.get(ATTR_BREEDER_QUERY)
-                    or self.plant._plant_info.get(ATTR_BREEDER, "")
-                )
+                # Der beim Anlegen aufgeloeste Suchbegriff. Nicht der auf der
+                # Pflanze gespeicherte Zuechter -- das ist der Anzeigename, und
+                # der fuehrt zu einem 404.
+                breeder = self.plant._plant_info.get(ATTR_BREEDER_QUERY, "")
                 # Das Strain-Feld der Optionen ist mit der pid vorbelegt, nicht mit
                 # der Sorte -- danach zu suchen findet nie etwas. Fuer die Abfrage
                 # daher die auf der Pflanze gespeicherte Sorte nehmen.
