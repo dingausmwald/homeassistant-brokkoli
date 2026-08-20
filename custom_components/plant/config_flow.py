@@ -1491,8 +1491,12 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
                 # Füge Sensor-Auswahlfelder hinzu
                 if sensor_entities.get("temperature"):
+                    # Kein default=: der Entity-Selektor validiert auch den
+                    # Default, und ohne zugewiesenen Sensor ist der None --
+                    # "Entity None is neither a valid entity ID nor a valid UUID".
+                    # suggested_value fuellt das Feld vor, ohne geprueft zu werden.
                     data_schema[
-                        vol.Optional(FLOW_SENSOR_TEMPERATURE, default=self.plant.sensor_temperature.external_sensor if self.plant.sensor_temperature else None)
+                        vol.Optional(FLOW_SENSOR_TEMPERATURE, description={"suggested_value": self.plant.sensor_temperature.external_sensor if self.plant.sensor_temperature else None})
                     ] = selector(
                         {
                             ATTR_ENTITY: {
@@ -1504,7 +1508,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
                 if sensor_entities.get("moisture"):
                     data_schema[
-                        vol.Optional(FLOW_SENSOR_MOISTURE, default=self.plant.sensor_moisture.external_sensor if self.plant.sensor_moisture else None)
+                        vol.Optional(FLOW_SENSOR_MOISTURE, description={"suggested_value": self.plant.sensor_moisture.external_sensor if self.plant.sensor_moisture else None})
                     ] = selector(
                         {
                             ATTR_ENTITY: {
@@ -1516,7 +1520,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
                 if sensor_entities.get("conductivity"):
                     data_schema[
-                        vol.Optional(FLOW_SENSOR_CONDUCTIVITY, default=self.plant.sensor_conductivity.external_sensor if self.plant.sensor_conductivity else None)
+                        vol.Optional(FLOW_SENSOR_CONDUCTIVITY, description={"suggested_value": self.plant.sensor_conductivity.external_sensor if self.plant.sensor_conductivity else None})
                     ] = selector(
                         {
                             ATTR_ENTITY: {
@@ -1528,7 +1532,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
                 if sensor_entities.get("illuminance"):
                     data_schema[
-                        vol.Optional(FLOW_SENSOR_ILLUMINANCE, default=self.plant.sensor_illuminance.external_sensor if self.plant.sensor_illuminance else None)
+                        vol.Optional(FLOW_SENSOR_ILLUMINANCE, description={"suggested_value": self.plant.sensor_illuminance.external_sensor if self.plant.sensor_illuminance else None})
                     ] = selector(
                         {
                             ATTR_ENTITY: {
@@ -1540,7 +1544,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
                 if sensor_entities.get("humidity"):
                     data_schema[
-                        vol.Optional(FLOW_SENSOR_HUMIDITY, default=self.plant.sensor_humidity.external_sensor if self.plant.sensor_humidity else None)
+                        vol.Optional(FLOW_SENSOR_HUMIDITY, description={"suggested_value": self.plant.sensor_humidity.external_sensor if self.plant.sensor_humidity else None})
                     ] = selector(
                         {
                             ATTR_ENTITY: {
@@ -1552,7 +1556,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
                 if sensor_entities.get("energy"):
                     data_schema[
-                        vol.Optional(FLOW_SENSOR_POWER_CONSUMPTION, default=self.plant.total_power_consumption.external_sensor if hasattr(self.plant.total_power_consumption, 'external_sensor') else None)
+                        vol.Optional(FLOW_SENSOR_POWER_CONSUMPTION, description={"suggested_value": self.plant.total_power_consumption.external_sensor if hasattr(self.plant.total_power_consumption, 'external_sensor') else None})
                     ] = selector(
                         {
                             ATTR_ENTITY: {
@@ -1565,7 +1569,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 # Füge pH-Sensor-Auswahlfeld hinzu
                 if sensor_entities.get("ph"):
                     data_schema[
-                        vol.Optional(FLOW_SENSOR_PH, default=self.plant.sensor_ph.external_sensor if self.plant.sensor_ph else None)
+                        vol.Optional(FLOW_SENSOR_PH, description={"suggested_value": self.plant.sensor_ph.external_sensor if self.plant.sensor_ph else None})
                     ] = selector(
                         {
                             ATTR_ENTITY: {
