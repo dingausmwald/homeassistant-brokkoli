@@ -2440,13 +2440,8 @@ class PlantDevice(RestoreEntity):
 
     @property
     def name(self) -> str:
-        """Return the name with emojis for the device."""
-        name = self._plant_info[ATTR_NAME]
-        # Füge das Emoji hinzu, falls eines gesetzt ist
-        plant_emoji = self._plant_info.get('plant_emoji')
-        if plant_emoji and plant_emoji not in name:
-            name = f"{name} {plant_emoji}"
-        return name
+        """Return the stored name -- the emoji is appended once, at creation."""
+        return self._plant_info[ATTR_NAME]
 
     @property
     def _name(self) -> str:
