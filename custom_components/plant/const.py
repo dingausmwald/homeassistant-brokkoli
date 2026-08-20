@@ -45,6 +45,11 @@ ATTR_STRAIN = "strain"
 ATTR_IMAGE = "image"
 ATTR_SEARCH_FOR = "search_for"
 ATTR_BREEDER = "breeder"
+# The breeder term that actually resolved on seedfinder. Its URL slug is not
+# the display name ("Skunk House" resolves, "Skunk House Genetics" 404s), and
+# the response overwrites ATTR_BREEDER with the display name -- so keep the
+# working term for later lookups.
+ATTR_BREEDER_QUERY = "breeder_query"
 ATTR_PID = "pid"
 
 # Readings are used by humans

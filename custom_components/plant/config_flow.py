@@ -53,6 +53,7 @@ from .const import (
     ATTR_SENSORS,
     ATTR_STRAIN,
     ATTR_BREEDER,
+    ATTR_BREEDER_QUERY,
     CONF_MAX_CONDUCTIVITY,
     CONF_MAX_DLI,
     CONF_MAX_HUMIDITY,
@@ -516,6 +517,10 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 plant_info[ATTR_NAME] = self.plant_info[ATTR_NAME] + (f" {plant_emoji}" if plant_emoji else "")
                 plant_info["plant_emoji"] = plant_emoji
                 self.plant_info.update(plant_info)
+                # Nach dem update(), sonst ueberschreibt die Antwort ihn wieder.
+                # Ohne diesen Wert kann spaeter niemand mehr nachschlagen: auf
+                # der Pflanze steht dann der Anzeigename, und der loest nicht auf.
+                self.plant_info[ATTR_BREEDER_QUERY] = self._breeder_query
             else:
                 # Wenn keine OpenPlantbook-Daten verfügbar sind, füge trotzdem das Emoji zum Namen hinzu
                 plant_emoji = self.plant_info.get("plant_emoji", "")
@@ -1659,16 +1664,27 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         if new_strain is not None and force_new_strain:
             _LOGGER.debug("Updating strain to: %s", new_strain)
             plant_helper = PlantHelper(hass=self.hass)
+            # Ohne Zuechter lehnt seedfinder den Aufruf sofort ab. Bevorzugt den
+            # Begriff, der beim Anlegen aufgeloest hat -- der auf der Pflanze
+            # gespeicherte ist der Anzeigename und fuehrt zu einem 404.
+            breeder = (
+                self.plant._plant_info.get(ATTR_BREEDER_QUERY)
+                or self.plant._plant_info.get(ATTR_BREEDER, "")
+            )
             plant_config = await plant_helper.generate_configentry(
                 config={
                     ATTR_STRAIN: new_strain,
+                    ATTR_BREEDER: breeder,
                     ATTR_ENTITY_PICTURE: entity_picture,
                     OPB_DISPLAY_PID: new_display_strain,
                     FLOW_FORCE_SPECIES_UPDATE: force_new_strain,
                 }
             )
-            
-            if plant_config.get(DATA_SOURCE) == DATA_SOURCE_PLANTBOOK:
+
+            # generate_configentry legt alles unter FLOW_PLANT_INFO ab. Die
+            # Pruefung sah eine Ebene zu hoch nach und war deshalb immer None --
+            # der ganze Block darunter lief nie.
+            if plant_config.get(FLOW_PLANT_INFO, {}).get(DATA_SOURCE) == DATA_SOURCE_PLANTBOOK:
                 # Update plant info
                 self.plant.add_image(plant_config[FLOW_PLANT_INFO][ATTR_ENTITY_PICTURE])
                 self.plant.display_strain = plant_config[FLOW_PLANT_INFO][OPB_DISPLAY_PID]
