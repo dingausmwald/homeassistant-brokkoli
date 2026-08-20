@@ -565,7 +565,7 @@ class PlantCurrentConductivity(PlantCurrentStatus):
                 "conductivity_normalization": {
                     "enabled": True,
                     "raw_value": self._raw_value,
-                    "factor": round(moisture_sensor._normalize_factor, 2) if hasattr(moisture_sensor, '_normalize_factor') else None,
+                    "factor": round(moisture_sensor._normalize_factor, 2) if getattr(moisture_sensor, '_normalize_factor', None) is not None else None,
                 }
             })
         
