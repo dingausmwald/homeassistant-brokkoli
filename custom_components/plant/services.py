@@ -982,8 +982,15 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         
         # Update Growth Phase Select Entity wenn Updates vorhanden sind
         if growth_phase_updates and target_plant.growth_phase_select:
+            attrs = target_plant.growth_phase_select._attr_extra_state_attributes
             for attr, value in growth_phase_updates.items():
-                target_plant.growth_phase_select._attr_extra_state_attributes[attr] = value
+                # An empty value means "clear". Storing "" would leave the
+                # attribute set but blank, which reads as a date that exists
+                # and is empty; removing it makes it genuinely unset again.
+                if value in (None, ""):
+                    attrs.pop(attr, None)
+                else:
+                    attrs[attr] = value
             target_plant.growth_phase_select.async_write_ha_state()
         
         # Update Positions-Attribute
