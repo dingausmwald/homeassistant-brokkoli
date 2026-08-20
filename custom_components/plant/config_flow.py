@@ -1675,9 +1675,16 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 self.plant._plant_info.get(ATTR_BREEDER_QUERY)
                 or self.plant._plant_info.get(ATTR_BREEDER, "")
             )
+            # Das Strain-Feld der Optionen ist mit der pid vorbelegt, nicht mit
+            # der Sorte -- danach zu suchen findet nie etwas. Fuer die Abfrage
+            # daher die auf der Pflanze gespeicherte Sorte nehmen.
+            # ATTR_NAME muss mit: schlaegt die Abfrage fehl, faellt
+            # generate_configentry in den Basis-Zweig und liest config[ATTR_NAME].
+            lookup_strain = self.plant._plant_info.get(ATTR_STRAIN) or new_strain
             plant_config = await plant_helper.generate_configentry(
                 config={
-                    ATTR_STRAIN: new_strain,
+                    ATTR_NAME: self.plant.name,
+                    ATTR_STRAIN: lookup_strain,
                     ATTR_BREEDER: breeder,
                     ATTR_ENTITY_PICTURE: entity_picture,
                     OPB_DISPLAY_PID: new_display_strain,
