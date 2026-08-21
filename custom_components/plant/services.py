@@ -849,7 +849,20 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             )
 
         _LOGGER.debug("Config Entry erstellt mit ID: %s", result["result"].entry_id)
-        
+
+        # Die Optionen der Quelle mitnehmen. Ohne sie startet der Klon voellig
+        # ohne eigene Werte, und jede Einstellung faellt auf den globalen
+        # Default im Konfigurationsknoten zurueck -- eine Aenderung dort
+        # verstellte damit alle Klone auf einmal. Die Sensor-Zuweisungen bleiben
+        # aussen vor, der Klon wird bewusst ohne Sensoren angelegt.
+        options = {
+            key: value
+            for key, value in source_plant._config.options.items()
+            if key not in sensor_keys
+        }
+        if options:
+            hass.config_entries.async_update_entry(result["result"], options=options)
+
         # Verzögerung für die Entityerstellung
         await asyncio.sleep(2)
         
