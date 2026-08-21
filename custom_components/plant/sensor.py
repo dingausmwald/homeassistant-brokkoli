@@ -372,7 +372,11 @@ class PlantCurrentStatus(RestoreSensor):
         super().__init__()
         self._hass = hass
         self._config = config
-        self._default_state = 0
+        # Kein Messwert heisst "unbekannt", nicht 0. Mit 0 meldete jede Pflanze
+        # direkt nach dem Start 0 % Bodenfeuchte bzw. 0 °C -- ein Wert, der als
+        # echte Messung durchgeht: er loest den Problemzustand aus und landet in
+        # der Statistik, bis der externe Sensor das erste Mal sendet.
+        self._default_state = None
         self._plant = plantdevice
         if not self._attr_native_value or self._attr_native_value == STATE_UNKNOWN:
             self._attr_native_value = self._default_state
@@ -2097,7 +2101,6 @@ class PlantCurrentPh(PlantCurrentStatus):
         self._external_sensor = config.data[FLOW_PLANT_INFO].get(FLOW_SENSOR_PH)
         self._attr_icon = ICON_PH
         self._attr_native_unit_of_measurement = None  # pH hat keine Einheit
-        self._default_state = 7.0  # Neutraler pH-Wert als Default
         super().__init__(hass, config, plantdevice)
 
     @property
