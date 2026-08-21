@@ -273,6 +273,27 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     limit=30,
                 )
 
+    # Globale Defaults einmalig festschreiben. Ohne eigenen Wert liest eine
+    # Pflanze den Problemausloeser bei JEDEM Zugriff aus dem Konfigurationsknoten
+    # -- eine Aenderung dort verstellte damit rueckwirkend jede Pflanze, die nie
+    # eigene Optionen bekommen hat (typischerweise alle Klone und alle Pflanzen
+    # ohne Seedfinder-Treffer). Ein Default gilt beim Anlegen, nicht auf ewig.
+    if plant.device_type == DEVICE_TYPE_PLANT:
+        fehlend = {
+            key: getattr(plant, key)
+            for key in (
+                FLOW_ILLUMINANCE_TRIGGER, FLOW_HUMIDITY_TRIGGER, FLOW_TEMPERATURE_TRIGGER,
+                FLOW_DLI_TRIGGER, FLOW_MOISTURE_TRIGGER, FLOW_CONDUCTIVITY_TRIGGER,
+                FLOW_WATER_CONSUMPTION_TRIGGER, FLOW_FERTILIZER_CONSUMPTION_TRIGGER,
+                FLOW_POWER_CONSUMPTION_TRIGGER, FLOW_PH_TRIGGER,
+            )
+            if key not in entry.options
+        }
+        if fehlend:
+            hass.config_entries.async_update_entry(
+                entry, options={**entry.options, **fehlend}
+            )
+
     # Setze das Flag zurück nach vollständigem Setup
     if entry.data[FLOW_PLANT_INFO].get(ATTR_IS_NEW_PLANT, False):
         data = dict(entry.data)
