@@ -2444,16 +2444,6 @@ class PlantDevice(RestoreEntity):
         return self._plant_info[ATTR_NAME]
 
     @property
-    def _name(self) -> str:
-        """Return the clean name without emojis for entities."""
-        name = self._plant_info[ATTR_NAME]
-        # Entferne das Emoji falls vorhanden
-        plant_emoji = self._plant_info.get('plant_emoji')
-        if plant_emoji and plant_emoji in name:
-            name = name.replace(f" {plant_emoji}", "")
-        return name
-
-    @property
     def has_entity_name(self) -> bool:
         """Return False to use raw entity names without device prefix."""
         return False

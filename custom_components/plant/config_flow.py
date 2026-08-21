@@ -336,6 +336,8 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             config_data = {}
 
         if user_input is not None:
+            # Das Icon wandert einmalig in den Namen und wird nicht gespeichert.
+            cycle_emoji = user_input.get("plant_emoji", config_data.get("default_cycle_icon", ""))
             self.plant_info = {
                 ATTR_NAME: user_input[ATTR_NAME],
                 ATTR_DEVICE_TYPE: DEVICE_TYPE_CYCLE,
@@ -343,7 +345,6 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 ATTR_STRAIN: "",
                 ATTR_BREEDER: "",
                 "growth_phase": DEFAULT_GROWTH_PHASE,
-                "plant_emoji": user_input.get("plant_emoji", config_data.get("default_cycle_icon", "")),
                 "growth_phase_aggregation": user_input.get("growth_phase_aggregation", config_data.get("default_growth_phase_aggregation", "min")),
                 "flowering_duration_aggregation": user_input.get("flowering_duration_aggregation", config_data.get("default_flowering_duration_aggregation", "mean")),
                 "pot_size_aggregation": user_input.get("pot_size_aggregation", config_data.get("default_pot_size_aggregation", "mean")),
@@ -376,7 +377,7 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     ATTR_STRAIN: "",
                     ATTR_BREEDER: "",
                     ATTR_SENSORS: {},
-                    "plant_emoji": self.plant_info.get("plant_emoji", ""),
+                    "plant_emoji": cycle_emoji,
                     ATTR_DEVICE_TYPE: DEVICE_TYPE_CYCLE,
                 }
             )
@@ -401,7 +402,6 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     ATTR_STRAIN: "",
                     ATTR_BREEDER: "",
                     "growth_phase": DEFAULT_GROWTH_PHASE,
-                    "plant_emoji": user_input.get("plant_emoji", ""),
                 }}
             )
 
@@ -475,6 +475,8 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             config_data = {}
 
         if user_input is not None:
+            # Das Icon wandert einmalig in den Namen und wird nicht gespeichert.
+            plant_emoji = user_input.get("plant_emoji", "")
             self.plant_info = {
                 ATTR_NAME: user_input[ATTR_NAME],
                 ATTR_DEVICE_TYPE: DEVICE_TYPE_PLANT,
@@ -482,7 +484,6 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 ATTR_STRAIN: user_input[ATTR_STRAIN],
                 ATTR_BREEDER: user_input.get(ATTR_BREEDER, ""),
                 "growth_phase": user_input.get("growth_phase", DEFAULT_GROWTH_PHASE),
-                "plant_emoji": user_input.get("plant_emoji", "🌱"),
                 ATTR_POT_SIZE: user_input.get(ATTR_POT_SIZE, DEFAULT_POT_SIZE),
                 ATTR_WATER_CAPACITY: user_input.get(ATTR_WATER_CAPACITY, DEFAULT_WATER_CAPACITY),
                 ATTR_NORMALIZE_MOISTURE: user_input.get(ATTR_NORMALIZE_MOISTURE, False),
@@ -514,9 +515,7 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if plant_config and plant_config.get(FLOW_PLANT_INFO, {}).get(DATA_SOURCE) == DATA_SOURCE_PLANTBOOK:
                 plant_info = plant_config[FLOW_PLANT_INFO]
                 # Füge den Namen mit Emoji hinzu
-                plant_emoji = self.plant_info.get("plant_emoji", "")
                 plant_info[ATTR_NAME] = self.plant_info[ATTR_NAME] + (f" {plant_emoji}" if plant_emoji else "")
-                plant_info["plant_emoji"] = plant_emoji
                 self.plant_info.update(plant_info)
                 # Nach dem update(), sonst ueberschreibt die Antwort ihn wieder.
                 # Ohne diesen Wert kann spaeter niemand mehr nachschlagen: auf
@@ -524,7 +523,6 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self.plant_info[ATTR_BREEDER_QUERY] = self._breeder_query
             else:
                 # Wenn keine OpenPlantbook-Daten verfügbar sind, füge trotzdem das Emoji zum Namen hinzu
-                plant_emoji = self.plant_info.get("plant_emoji", "")
                 self.plant_info[ATTR_NAME] = self.plant_info[ATTR_NAME] + (f" {plant_emoji}" if plant_emoji else "")
 
             # Wenn der Aufruf vom Service kommt, erstelle direkt den Entry
@@ -537,7 +535,6 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         ATTR_STRAIN: self.plant_info[ATTR_STRAIN],
                         ATTR_BREEDER: self._plantbook_breeder(),
                         ATTR_SENSORS: {},
-                        "plant_emoji": self.plant_info.get("plant_emoji", ""),
                     }
                 )
                 
@@ -658,7 +655,6 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 ATTR_STRAIN: self.plant_info[ATTR_STRAIN],
                 ATTR_BREEDER: self._plantbook_breeder(),
                 ATTR_SENSORS: {},
-                "plant_emoji": self.plant_info.get("plant_emoji", ""),
             }
         )
 

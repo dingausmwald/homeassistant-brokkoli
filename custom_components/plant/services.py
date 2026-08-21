@@ -299,13 +299,14 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         """Create a new plant."""
         try:
             # Erstelle ein vollständiges plant_info Objekt
+            # Das Icon wandert einmalig in den Namen und wird nicht gespeichert.
+            plant_emoji = call.data.get("plant_emoji", "🌿")
             plant_info = {
                 ATTR_DEVICE_TYPE: DEVICE_TYPE_PLANT,
                 ATTR_NAME: call.data[ATTR_NAME],
                 ATTR_STRAIN: call.data[ATTR_STRAIN],
                 ATTR_BREEDER: call.data.get(ATTR_BREEDER, ""),
                 "growth_phase": call.data.get("growth_phase", DEFAULT_GROWTH_PHASE),
-                "plant_emoji": call.data.get("plant_emoji", "🌿"),
                 ATTR_IS_NEW_PLANT: True,
             }
 
@@ -335,9 +336,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             if plant_config and plant_config.get(FLOW_PLANT_INFO, {}).get(DATA_SOURCE) == DATA_SOURCE_PLANTBOOK:
                 opb_info = plant_config[FLOW_PLANT_INFO]
                 # Füge den Namen mit Emoji hinzu
-                plant_emoji = plant_info.get("plant_emoji", "")
                 opb_info[ATTR_NAME] = plant_info[ATTR_NAME] + (f" {plant_emoji}" if plant_emoji else "")
-                opb_info["plant_emoji"] = plant_emoji
                 
                 # Übernehme die Sensorzuweisungen
                 for sensor_key in [FLOW_SENSOR_TEMPERATURE, FLOW_SENSOR_MOISTURE, FLOW_SENSOR_CONDUCTIVITY, 
@@ -354,7 +353,6 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 plant_info = opb_info
             else:
                 # Wenn keine OpenPlantbook-Daten verfügbar sind, füge trotzdem das Emoji zum Namen hinzu
-                plant_emoji = plant_info.get("plant_emoji", "")
                 plant_info[ATTR_NAME] = plant_info[ATTR_NAME] + (f" {plant_emoji}" if plant_emoji else "")
                 
                 # Generiere Standard-Grenzwerte
@@ -364,7 +362,6 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                         ATTR_STRAIN: plant_info[ATTR_STRAIN],
                         ATTR_BREEDER: plant_info.get(ATTR_BREEDER, ""),
                         ATTR_SENSORS: {},
-                        "plant_emoji": plant_info.get("plant_emoji", ""),
                     }
                 )
                 
@@ -460,10 +457,11 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         """Create a new cycle via service call."""
         try:
             # Erstelle ein vollständiges cycle_info Objekt
+            # Das Icon wandert einmalig in den Namen und wird nicht gespeichert.
+            cycle_emoji = call.data.get("plant_emoji", "🔄")
             cycle_info = {
                 ATTR_NAME: call.data.get(ATTR_NAME),
                 ATTR_DEVICE_TYPE: DEVICE_TYPE_CYCLE,
-                "plant_emoji": call.data.get("plant_emoji", "🔄"),
                 ATTR_IS_NEW_PLANT: True,
             }
 
@@ -508,7 +506,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                     ATTR_STRAIN: "",
                     ATTR_BREEDER: "",
                     ATTR_SENSORS: {},
-                    "plant_emoji": cycle_info.get("plant_emoji", ""),
+                    "plant_emoji": cycle_emoji,
                     ATTR_DEVICE_TYPE: DEVICE_TYPE_CYCLE,
                 }
             )
