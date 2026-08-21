@@ -416,6 +416,13 @@ class PlantCurrentStatus(RestoreSensor):
                 self._state_changed_event,
             )
 
+        # Beim Setup weist die Plattform den externen Sensor zu, bevor
+        # async_add_entities die Entity fertig hinzugefuegt hat -- dann ist hass
+        # noch None und async_write_ha_state wirft, was den kompletten
+        # Plattform-Aufbau abbricht. Den Zustand schreibt HA ohnehin, sobald die
+        # Entity hinzugefuegt ist.
+        if self.hass is None:
+            return
         self.async_write_ha_state()
 
     async def async_added_to_hass(self) -> None:
@@ -1970,6 +1977,13 @@ class PlantTotalPowerConsumption(RestoreSensor):
             )
         else:
             self._attr_native_value = 0
+        # Beim Setup weist die Plattform den externen Sensor zu, bevor
+        # async_add_entities die Entity fertig hinzugefuegt hat -- dann ist hass
+        # noch None und async_write_ha_state wirft, was den kompletten
+        # Plattform-Aufbau abbricht. Den Zustand schreibt HA ohnehin, sobald die
+        # Entity hinzugefuegt ist.
+        if self.hass is None:
+            return
         self.async_write_ha_state()
 
 
