@@ -725,6 +725,31 @@ class PlantCurrentMoisture(PlantCurrentStatus):
         
         return attributes
 
+    def _apply_normalization(self) -> None:
+        """Skaliert den Rohwert mit dem zwischengespeicherten Maximum."""
+        if not self._normalize or not self._max_moisture or self._attr_native_value is None:
+            return
+        try:
+            normalized = min(100, (float(self._attr_native_value) / self._max_moisture) * 100)
+            self._attr_native_value = round(normalized, 1)
+        except (ValueError, TypeError):
+            pass
+
+    @callback
+    def state_changed(self, entity_id, new_state):
+        """Uebernimmt den Messwert des externen Sensors.
+
+        Die Basisklasse schreibt den Rohwert. Normalisiert wurde bisher nur in
+        async_update -- wer den Zustand vorher schrieb, zeigte den Rohwert an:
+        61 % statt der skalierten 96 %, ohne dass irgendetwas gegossen wurde.
+        Das zuletzt berechnete Maximum liegt zwischengespeichert vor, es wird
+        alle fuenf Minuten in async_update aufgefrischt.
+        """
+        super().state_changed(entity_id, new_state)
+        if self._attr_native_value is not None:
+            self._raw_value = self._attr_native_value
+        self._apply_normalization()
+
     async def async_update(self) -> None:
         """Update the sensor."""
         await super().async_update()
@@ -736,15 +761,7 @@ class PlantCurrentMoisture(PlantCurrentStatus):
         # Aktualisiere Normalisierung
         await self._update_normalization()
         
-        # Normalisiere den Wert wenn nötig
-        if (self._normalize and self._max_moisture and 
-            self._attr_native_value is not None):
-            try:
-                normalized = min(100, (float(self._attr_native_value) / 
-                                     self._max_moisture) * 100)
-                self._attr_native_value = round(normalized, 1)
-            except (ValueError, TypeError):
-                pass
+        self._apply_normalization()
 
     @property
     def device_class(self) -> str:
