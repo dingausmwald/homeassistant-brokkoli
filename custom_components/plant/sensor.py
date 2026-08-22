@@ -427,6 +427,17 @@ class PlantCurrentStatus(RestoreSensor):
         # Entity hinzugefuegt ist.
         if self.hass is None:
             return
+
+        # Den Messwert der bisherigen Quelle nicht stehen lassen: bis der neue
+        # Sensor das erste Mal meldet, zeigte die Entity sonst weiter den Wert
+        # der alten Zuweisung -- bei einem Sensor, der nur alle paar Minuten
+        # sendet, minutenlang. state_changed uebernimmt den aktuellen Stand der
+        # neuen Quelle (und setzt ohne Quelle auf unbekannt zurueck).
+        self.state_changed(
+            self._external_sensor,
+            self._hass.states.get(self._external_sensor) if self._external_sensor else None,
+        )
+
         self.async_write_ha_state()
 
     async def async_added_to_hass(self) -> None:
