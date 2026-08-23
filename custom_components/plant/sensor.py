@@ -737,11 +737,26 @@ class PlantCurrentMoisture(PlantCurrentStatus):
         return attributes
 
     def _apply_normalization(self) -> None:
-        """Skaliert den Rohwert mit dem zwischengespeicherten Maximum."""
-        if not self._normalize or not self._max_moisture or self._attr_native_value is None:
+        """Setzt den veroeffentlichten Wert aus dem Rohwert.
+
+        Rechnet immer aus _raw_value, nie aus dem bereits gesetzten Wert -- so
+        ist der Aufruf wiederholbar und kann nicht doppelt skalieren.
+
+        Ohne bekanntes Maximum wird nichts veroeffentlicht: der Rohwert ist bei
+        eingeschalteter Normalisierung keine Bodenfeuchte dieser Pflanze, und
+        die Pflanze pruefte ihn gegen die Schwellen (58 gegen ein Minimum von
+        60), was Problemmeldungen ohne jeden Messwertabfall ausloeste.
+        """
+        if self._raw_value is None:
+            return
+        if not self._normalize:
+            self._attr_native_value = self._raw_value
+            return
+        if not self._max_moisture:
+            self._attr_native_value = None
             return
         try:
-            normalized = min(100, (float(self._attr_native_value) / self._max_moisture) * 100)
+            normalized = min(100, (float(self._raw_value) / self._max_moisture) * 100)
             self._attr_native_value = round(normalized, 1)
         except (ValueError, TypeError):
             pass
@@ -764,14 +779,17 @@ class PlantCurrentMoisture(PlantCurrentStatus):
     async def async_update(self) -> None:
         """Update the sensor."""
         await super().async_update()
-        
+
         # Speichere den Rohwert vor der Normalisierung
         if self._attr_native_value is not None:
             self._raw_value = self._attr_native_value
-        
-        # Aktualisiere Normalisierung
+
+        # Erst skalieren, dann das Maximum auffrischen. Andersherum stand
+        # waehrend der Neuberechnung der Rohwert in der Entity -- und die ist
+        # ein await auf den Recorder, alle fuenf Minuten. Genau in diesem
+        # Fenster las die Pflanze den Wert fuer ihre Schwellenpruefung.
+        self._apply_normalization()
         await self._update_normalization()
-        
         self._apply_normalization()
 
     @property
