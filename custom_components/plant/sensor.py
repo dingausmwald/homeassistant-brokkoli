@@ -1651,19 +1651,22 @@ class PlantCurrentFertilizerConsumption(RestoreSensor):
             current_value = float(new_state.state)
             current_time = dt_util.utcnow()
 
-            # 24h-Rolling-Window analog MoistureConsumption.
-            # Summe der positiven Anstiege (µS/cm) im Fenster, umgerechnet auf mS/cm.
+            # 24h-Rolling-Window analog MoistureConsumption: gezaehlt wird, was die
+            # Pflanze aufnimmt, also die RUECKGAENGE der Leitfaehigkeit (µS/cm),
+            # umgerechnet auf mS/cm. Vorher summierte der Sensor die Anstiege --
+            # das ist die zugefuehrte Menge, nicht der Verbrauch, und damit die
+            # Gegenrichtung zum Wasserverbrauch, der schon immer die Abfaelle zaehlt.
             self._history.append((current_time, current_value))
             cutoff_time = current_time - timedelta(hours=24)
             self._history = [(t, v) for t, v in self._history if t >= cutoff_time]
 
             if len(self._history) >= 2:
-                rises_us = sum(
-                    self._history[i][1] - self._history[i-1][1]
+                drops_us = sum(
+                    self._history[i-1][1] - self._history[i][1]
                     for i in range(1, len(self._history))
-                    if self._history[i][1] > self._history[i-1][1]
+                    if self._history[i][1] < self._history[i-1][1]
                 )
-                self._attr_native_value = round(rises_us / 1000.0, 3)
+                self._attr_native_value = round(drops_us / 1000.0, 3)
                 self._last_update = current_time.isoformat()
                 self.async_write_ha_state()
 
