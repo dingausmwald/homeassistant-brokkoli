@@ -387,6 +387,14 @@ ATTR_NORMALIZE_PERCENTILE = "normalize_percentile"
 DEFAULT_NORMALIZE_WINDOW = 7  # Tage
 DEFAULT_NORMALIZE_PERCENTILE = 95
 
+# Moisture smoothing. Not a setting: the smoothed reading is offered alongside
+# the published one and only the consumption calculation uses it, so there is
+# nothing to weigh up -- without it that calculation counts probe quantisation
+# as water. Fifteen minutes removes the jitter of every probe measured so far
+# while still tracking a dry-down of a few percent per hour.
+SMOOTH_WINDOW_MINUTES = 15
+MIN_SMOOTH_SAMPLES = 3  # darunter wird der Rohwert durchgereicht
+
 # Füge die neue Service-Konstante hinzu
 SERVICE_CLONE_PLANT = "clone_plant"
 

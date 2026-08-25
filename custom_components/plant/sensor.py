@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 import inspect
 import logging
 import random
-from statistics import quantiles
+from statistics import median_low, quantiles
 from typing import Any
 
 from homeassistant.components.integration.const import METHOD_TRAPEZOIDAL
@@ -99,6 +99,8 @@ from .const import (
     ATTR_NORMALIZE_MOISTURE,
     ATTR_NORMALIZE_WINDOW,
     ATTR_NORMALIZE_PERCENTILE,
+    MIN_SMOOTH_SAMPLES,
+    SMOOTH_WINDOW_MINUTES,
     DEFAULT_NORMALIZE_WINDOW,
     DEFAULT_NORMALIZE_PERCENTILE,
     ICON_WATER_CONSUMPTION,
@@ -653,6 +655,10 @@ class PlantCurrentMoisture(PlantCurrentStatus):
         self._max_moisture = None
         self._last_normalize_update = None
 
+        self._smooth_buffer = []
+        self._smoothed_value = None
+        self._last_sample_ts = None
+
     async def async_added_to_hass(self) -> None:
         """When entity is added to hass."""
         await super().async_added_to_hass()
@@ -733,8 +739,83 @@ class PlantCurrentMoisture(PlantCurrentStatus):
                     "raw_value": self._raw_value if hasattr(self, '_raw_value') else None,
                 }
             })
-        
+
+        attributes.update({
+            "moisture_smoothing": {
+                "window_minutes": SMOOTH_WINDOW_MINUTES,
+                "samples": len(self._smooth_buffer),
+                "raw_value": self._raw_value,
+                "smoothed_value": self.smoothed_value,
+            }
+        })
+
         return attributes
+
+    def _prune_smooth_buffer(self) -> None:
+        """Drop readings that have left the smoothing window."""
+        cutoff = dt_util.utcnow() - timedelta(minutes=SMOOTH_WINDOW_MINUTES)
+        self._smooth_buffer = [(t, v) for t, v in self._smooth_buffer if t >= cutoff]
+
+    def _add_sample(self, value, timestamp=None) -> None:
+        """Take one reading of the external sensor into the smoothing window.
+
+        Only readings that are actually new are kept. state_changed also runs
+        for a state that is already in the buffer -- replace_external_sensor
+        replays the current one, and the platform writes the state again on
+        reload -- and a duplicate would pull the median towards that value.
+        """
+        if value is None:
+            return
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            return
+        if timestamp is not None and timestamp == self._last_sample_ts:
+            return
+        self._last_sample_ts = timestamp
+        self._smooth_buffer.append((timestamp or dt_util.utcnow(), numeric))
+        self._prune_smooth_buffer()
+
+    def _apply_smoothing(self) -> None:
+        """Set the value the rest of the pipeline works on.
+
+        The reading flips half a percent up and down between two samples a
+        minute apart. That is the probe quantising, not water leaving the pot,
+        but the consumption sensor sums every downward step and so counts it as
+        consumption. A median removes it and leaves the watering edge sharp,
+        which a moving average would smear across the following samples.
+
+        median_low, not median: on an even number of readings median averages
+        the two middle ones, inventing a value that was never measured. On a
+        probe alternating between 70.0 and 70.5 that creates a third level at
+        70.25, and the consumption sensor counts every step down to it -- the
+        very jitter this is here to remove. median_low always returns a reading
+        that actually occurred.
+
+        The window is measured in time, not in a number of samples: the probes
+        report anywhere between once a minute and once every two hours, so a
+        fixed sample count would average over half the night whenever readings
+        are sparse and lag the real dry-down by hours.
+
+        Below MIN_SMOOTH_SAMPLES readings there is nothing to take a median of
+        and the raw value is passed through unchanged.
+
+        The result is deliberately not published: a median trails a watering by
+        about half the window, which is fine where the movement gets summed up
+        but wrong for a reading someone looks at. The entity keeps showing the
+        raw value, and only the consumption sensor reads the smoothed one --
+        the delay costs it nothing, because a delayed signal covers the same
+        total distance.
+        """
+        if self._raw_value is None:
+            self._smoothed_value = None
+            return
+        self._prune_smooth_buffer()
+        values = [v for _, v in self._smooth_buffer]
+        if len(values) < MIN_SMOOTH_SAMPLES:
+            self._smoothed_value = self._raw_value
+            return
+        self._smoothed_value = median_low(values)
 
     def _apply_normalization(self) -> None:
         """Setzt den veroeffentlichten Wert aus dem Rohwert.
@@ -761,6 +842,29 @@ class PlantCurrentMoisture(PlantCurrentStatus):
         except (ValueError, TypeError):
             pass
 
+    @property
+    def smoothed_value(self):
+        """Return the de-jittered reading, on the scale of the published state.
+
+        This is what the consumption sensor sums. Normalisation is applied the
+        same way it is for the published value, otherwise the two would live on
+        different scales and the litres would come out wrong.
+
+        Returns None until the window holds a reading, so callers fall back to
+        the published state.
+        """
+        if self._smoothed_value is None:
+            return None
+        try:
+            value = float(self._smoothed_value)
+        except (TypeError, ValueError):
+            return None
+        if not self._normalize:
+            return value
+        if not self._max_moisture:
+            return None
+        return round(min(100, (value / self._max_moisture) * 100), 1)
+
     @callback
     def state_changed(self, entity_id, new_state):
         """Uebernimmt den Messwert des externen Sensors.
@@ -774,6 +878,11 @@ class PlantCurrentMoisture(PlantCurrentStatus):
         super().state_changed(entity_id, new_state)
         if self._attr_native_value is not None:
             self._raw_value = self._attr_native_value
+            self._add_sample(
+                self._attr_native_value,
+                new_state.last_updated if new_state is not None else None,
+            )
+        self._apply_smoothing()
         self._apply_normalization()
 
     async def async_update(self) -> None:
@@ -783,6 +892,12 @@ class PlantCurrentMoisture(PlantCurrentStatus):
         # Speichere den Rohwert vor der Normalisierung
         if self._attr_native_value is not None:
             self._raw_value = self._attr_native_value
+
+        # Kein neuer Messwert an dieser Stelle: async_update liest den Zustand,
+        # den state_changed bereits gezaehlt hat. Das Fenster wird deshalb nur
+        # neu bewertet, nie befuellt -- sonst zoege jeder Aufruf den Median auf
+        # den aktuellen Wert.
+        self._apply_smoothing()
 
         # Erst skalieren, dann das Maximum auffrischen. Andersherum stand
         # waehrend der Neuberechnung der Rohwert in der Entity -- und die ist
@@ -1491,7 +1606,13 @@ class PlantCurrentMoistureConsumption(RestoreSensor):
             return
 
         try:
-            current_value = float(new_state.state)
+            # Auf dem geglaetteten Wert rechnen, solange die Pflanze ihn liefert.
+            # Der veroeffentlichte Messwert zappelt um einen halben Prozentpunkt
+            # zwischen zwei Messungen, und weil hier jeder Abwaertsschritt
+            # aufaddiert wird, zaehlt dieses Zappeln als Verbrauch -- je haeufiger
+            # eine Sonde meldet, desto mehr Wasser scheint die Pflanze zu ziehen.
+            smoothed = getattr(self._plant.sensor_moisture, "smoothed_value", None)
+            current_value = float(new_state.state) if smoothed is None else smoothed
             current_time = dt_util.utcnow()
 
             # Add to history
