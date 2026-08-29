@@ -180,7 +180,14 @@ async def async_setup_entry(
         
         # Erst die Entities zu HA hinzufügen
         async_add_entities(plant_sensors)
-        hass.data[DOMAIN][entry.entry_id][ATTR_SENSORS] = plant_sensors
+        # Own list for hass.data: entity_platform keeps the list we hand it
+        # (`entities = new_entities if type(new_entities) is list else
+        # list(new_entities)`) and iterates it later, in a task that suspends
+        # on every entity. Appending to that same list afterwards -- the total
+        # power sensor further down does -- puts an already-added entity back
+        # into the still-running batch, and HA raises "cannot be added a second
+        # time to an entity platform".
+        hass.data[DOMAIN][entry.entry_id][ATTR_SENSORS] = list(plant_sensors)
         
         # Dann die Sensoren der Plant hinzufügen
         plant.add_sensors(
