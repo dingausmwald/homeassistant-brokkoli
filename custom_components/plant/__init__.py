@@ -1064,6 +1064,17 @@ class PlantDevice(RestoreEntity):
         return self._plant_info.get(ATTR_PID, "")
 
     @property
+    def _image_web_path(self) -> str:
+        """The configured image directory, as a URL the frontend can request."""
+        for entry in self._hass.config_entries.async_entries(DOMAIN):
+            if entry.data.get("is_config", False):
+                download_path = entry.data[FLOW_PLANT_INFO].get(
+                    FLOW_DOWNLOAD_PATH, DEFAULT_IMAGE_PATH
+                )
+                return download_path.replace("/config/www/", "/local/")
+        return DEFAULT_IMAGE_PATH.replace("/config/www/", "/local/")
+
+    @property
     def extra_state_attributes(self):
         """Return the state attributes."""
         attrs = {
@@ -1098,6 +1109,11 @@ class PlantDevice(RestoreEntity):
             "notes": self._plant_info.get(ATTR_NOTES, ""),
             "website": self._plant_info.get("website", ""),
             "images": self._images,
+            # The cards build every image URL from this. They have always read
+            # it off the entity, but it was only ever sent in the get_info
+            # websocket response -- so a download path other than the default
+            # silently produced unreachable image URLs.
+            "download_path": self._image_web_path,
         }
 
         # Füge member_count für Cycles hinzu
@@ -1122,15 +1138,7 @@ class PlantDevice(RestoreEntity):
             return {}
 
         # Hole den Download-Pfad aus der Konfiguration und konvertiere ihn
-        config_entry = None
-        for entry in self._hass.config_entries.async_entries(DOMAIN):
-            if entry.data.get("is_config", False):
-                config_entry = entry
-                break
-
-        download_path = config_entry.data[FLOW_PLANT_INFO].get(FLOW_DOWNLOAD_PATH, DEFAULT_IMAGE_PATH) if config_entry else DEFAULT_IMAGE_PATH
-        # Konvertiere /config/www/ zu /local/
-        web_path = download_path.replace("/config/www/", "/local/")
+        web_path = self._image_web_path
 
         # Basis-Response mit Hauptsensoren
         response = {

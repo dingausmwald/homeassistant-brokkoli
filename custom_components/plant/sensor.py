@@ -1090,6 +1090,12 @@ class PlantTotalLightIntegral(IntegrationSensor):
             integration_kwargs["hass"] = hass
         super().__init__(**integration_kwargs)
         self._attr_has_entity_name = False
+        # The cards look their entities up by translation_key in the entity
+        # registry, which is language independent. Without one this sensor was
+        # the only entity they could not find that way -- which is why they had
+        # to ask plant/get_info for it. It does not affect the name: with
+        # has_entity_name False, the explicit name above still wins.
+        self._attr_translation_key = "total_integral"
         self._unit_of_measurement = UNIT_PPFD  # Benutze PPFD Einheit statt DLI
         self._attr_native_unit_of_measurement = UNIT_PPFD  # Setze auch native unit
         self._attr_icon = ICON_DLI
