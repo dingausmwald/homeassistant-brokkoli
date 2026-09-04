@@ -41,6 +41,7 @@ from .const import (
     ATTR_STRAIN,
     ATTR_BREEDER,
     DEFAULT_GROWTH_PHASE,
+    GROWTH_PHASES,
     FLOW_SENSOR_TEMPERATURE,
     FLOW_SENSOR_MOISTURE,
     FLOW_SENSOR_CONDUCTIVITY,
@@ -793,6 +794,19 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         
         # Markiere als neue Plant
         plant_info[ATTR_IS_NEW_PLANT] = True
+
+        # A clone starts over in the default growth phase from the configuration
+        # node. Inheriting the mother's phase would carry over the value she was
+        # created with -- the config entry is never updated when the phase is
+        # changed, so that value is stale and may not even be a valid phase.
+        default_phase = DEFAULT_GROWTH_PHASE
+        for entry in hass.config_entries.async_entries(DOMAIN):
+            if entry.data.get("is_config", False):
+                configured = entry.data[FLOW_PLANT_INFO].get("default_growth_phase")
+                if configured in GROWTH_PHASES:
+                    default_phase = configured
+                break
+        plant_info["growth_phase"] = default_phase
         
         _LOGGER.debug("Cloning plant with flowering duration: %s", flowering_duration)
 
