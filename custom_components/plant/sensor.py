@@ -61,6 +61,14 @@ from .const import (
     ATTR_PH,
     DATA_UPDATED,
     DEFAULT_LUX_TO_PPFD,
+    DEFAULT_EC_COMPENSATION,
+    EC_COMPENSATION_REFERENCE,
+    ATTR_CONDUCTIVITY_MODE,
+    CONDUCTIVITY_MODE_BULK,
+    CONDUCTIVITY_MODE_PORE_WATER,
+    DEFAULT_CONDUCTIVITY_MODE,
+    DEFAULT_PORE_EXPONENT,
+    MIN_MOISTURE_FOR_PORE_EC,
     DOMAIN,
     DOMAIN_SENSOR,
     FLOW_PLANT_INFO,
@@ -579,27 +587,25 @@ class PlantCurrentConductivity(PlantCurrentStatus):
         self._attr_icon = ICON_CONDUCTIVITY
         self._attr_native_unit_of_measurement = UnitOfConductivity.MICROSIEMENS_PER_CM
         self._raw_value = None
-        
-        # Lese Normalisierungseinstellungen aus der Config
-        self._normalize = config.data[FLOW_PLANT_INFO].get(ATTR_NORMALIZE_MOISTURE, False)
-        
+
+        self._mode = config.data[FLOW_PLANT_INFO].get(
+            ATTR_CONDUCTIVITY_MODE, DEFAULT_CONDUCTIVITY_MODE
+        )
+
         super().__init__(hass, config, plantdevice)
 
     @property
     def extra_state_attributes(self) -> dict:
         """Return additional sensor attributes."""
         attributes = super().extra_state_attributes or {}
-        
-        if self._normalize:
-            moisture_sensor = self._plant.sensor_moisture
-            attributes.update({
-                "conductivity_normalization": {
-                    "enabled": True,
-                    "raw_value": self._raw_value,
-                    "factor": round(moisture_sensor._normalize_factor, 2) if getattr(moisture_sensor, '_normalize_factor', None) is not None else None,
-                }
-            })
-        
+        attributes.update({
+            "conductivity_compensation": {
+                "mode": self._mode,
+                "raw_value": self._raw_value,
+                "moisture_used": self._moisture_for_pore_ec(),
+                "exponent": self._pore_exponent(),
+            }
+        })
         return attributes
 
     async def async_added_to_hass(self) -> None:
@@ -608,24 +614,80 @@ class PlantCurrentConductivity(PlantCurrentStatus):
         # Erzwinge sofortige Aktualisierung der Attribute
         self.async_write_ha_state()
 
+    def _pore_exponent(self) -> float:
+        """Exponent des Wasserterms in der Porenwasser-Schaetzung."""
+        entity = getattr(self._plant, "pore_exponent", None)
+        value = getattr(entity, "native_value", None) if entity else None
+        if value is None:
+            return DEFAULT_PORE_EXPONENT
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return DEFAULT_PORE_EXPONENT
+
+    def _moisture_for_pore_ec(self):
+        """Die veroeffentlichte Bodenfeuchte der Pflanze, oder None."""
+        sensor = getattr(self._plant, "sensor_moisture", None)
+        value = getattr(sensor, "native_value", None) if sensor else None
+        if value is None:
+            return None
+        try:
+            moisture = float(value)
+        except (TypeError, ValueError):
+            return None
+        return moisture if moisture >= MIN_MOISTURE_FOR_PORE_EC else None
+
+    def _apply_mode(self) -> None:
+        """Setzt den veroeffentlichten Wert aus dem Rohwert.
+
+        Der Bulk-EC vermischt Wassergehalt und Salzgehalt, weil trockene Poren
+        nicht leiten -- er schwankt innerhalb eines Bewaesserungszyklus um 25 bis
+        59 Prozent, ohne dass Naehrstoff dazukaeme. Die Division durch den
+        Wasserterm laesst die Konzentration in der Porenloesung uebrig.
+
+        Rechnet immer aus _raw_value, damit der Aufruf wiederholbar ist.
+
+        Ohne brauchbaren Feuchtewert wird der Bulk-Wert unveraendert
+        veroeffentlicht: anders als bei der Feuchte ist der EC auch
+        unkorrigiert eine gueltige Messgroesse.
+        """
+        if self._raw_value is None:
+            return
+        if self._mode != CONDUCTIVITY_MODE_PORE_WATER:
+            self._attr_native_value = self._raw_value
+            return
+        moisture = self._moisture_for_pore_ec()
+        if moisture is None:
+            self._attr_native_value = self._raw_value
+            return
+        try:
+            pore = float(self._raw_value) / (moisture / 100.0) ** self._pore_exponent()
+            self._attr_native_value = round(pore, 1)
+        except (ValueError, TypeError, ZeroDivisionError, OverflowError):
+            self._attr_native_value = self._raw_value
+
+    @callback
+    def state_changed(self, entity_id, new_state):
+        """Uebernimmt den Messwert des externen Sensors.
+
+        Ohne diesen Override schrieb die Basisklasse den Rohwert und erst der
+        naechste Poll rechnete um -- derselbe Fehler, der bei der Feuchte schon
+        behoben ist. Ausserdem liest die Feuchtekorrektur _raw_value von hier;
+        er muss also mit jedem Messwert frisch sein, nicht erst nach 30 Sekunden.
+        """
+        super().state_changed(entity_id, new_state)
+        if self._attr_native_value is not None:
+            self._raw_value = self._attr_native_value
+        self._apply_mode()
+
     async def async_update(self) -> None:
         """Update the sensor."""
         await super().async_update()
-        
-        # Speichere den Rohwert vor der Normalisierung
+
         if self._attr_native_value is not None:
             self._raw_value = self._attr_native_value
-        
-        # Normalisiere den Wert wenn der Moisture Sensor normalisiert wird
-        if self._normalize and self._attr_native_value is not None:
-            moisture_sensor = self._plant.sensor_moisture
-            if (hasattr(moisture_sensor, '_normalize_factor') and
-                moisture_sensor._normalize_factor is not None):
-                try:
-                    normalized = float(self._attr_native_value) * moisture_sensor._normalize_factor
-                    self._attr_native_value = round(normalized, 1)
-                except (ValueError, TypeError):
-                    pass
+
+        self._apply_mode()
 
     @property
     def device_class(self) -> str:
@@ -756,6 +818,20 @@ class PlantCurrentMoisture(PlantCurrentStatus):
             }
         })
 
+        factor = self._ec_factor()
+        ec = self._current_ec()
+        attributes.update({
+            "moisture_ec_compensation": {
+                "coefficient": factor,
+                "ec_raw": ec,
+                "reference": EC_COMPENSATION_REFERENCE,
+                "correction": (
+                    round(-factor * (ec - EC_COMPENSATION_REFERENCE), 1)
+                    if factor and ec is not None else 0
+                ),
+            }
+        })
+
         return attributes
 
     def _prune_smooth_buffer(self) -> None:
@@ -824,11 +900,73 @@ class PlantCurrentMoisture(PlantCurrentStatus):
             return
         self._smoothed_value = median_low(values)
 
+    def _ec_factor(self) -> float:
+        """Feuchte-Punkte je uS/cm, die der EC dem Messwert aufschlaegt."""
+        entity = getattr(self._plant, "ec_compensation", None)
+        value = getattr(entity, "native_value", None) if entity else None
+        if value is None:
+            return DEFAULT_EC_COMPENSATION
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return DEFAULT_EC_COMPENSATION
+
+    def _current_ec(self):
+        """Der unkorrigierte EC-Messwert derselben Sonde.
+
+        Aus der Conductivity-Entity gelesen, die ihn ohnehin fuehrt -- ihn hier
+        ein zweites Mal zu speichern hiesse, zwei Kopien synchron halten zu
+        muessen. Ausdruecklich der Rohwert und nie der veroeffentlichte: im
+        Porenwasser-Modus wird der aus genau dieser Bodenfeuchte gerechnet, und
+        beide haengen dann voneinander ab.
+        """
+        sensor = getattr(self._plant, "sensor_conductivity", None)
+        raw = getattr(sensor, "_raw_value", None) if sensor else None
+        if raw is None:
+            return None
+        try:
+            ec = float(raw)
+        except (TypeError, ValueError):
+            return None
+        return ec if ec > 0 else None
+
+    def _ec_compensated(self, value):
+        """Messwert ohne den Anteil, den der EC beisteuert.
+
+        Kapazitive Sonden messen die Impedanz des Mediums; bei ihrer niedrigen
+        Anregungsfrequenz traegt die Ionenleitung kraeftig mit. Faellt der EC im
+        Topf, faellt der Messwert, ohne dass Wasser fehlt.
+
+        Subtraktiv, nicht multiplikativ: ein Faktor kuerzt sich gegen die
+        Normalisierung weg, die durch ein Perzentil derselben Reihe teilt.
+
+        Ist die Korrektur aus, kommt der Wert unveraendert zurueck -- auch im
+        Typ, damit sich an bestehenden Pflanzen nichts aendert.
+        """
+        factor = self._ec_factor()
+        if not factor:
+            return value
+        ec = self._current_ec()
+        if ec is None:
+            return value
+        try:
+            corrected = float(value) - factor * (ec - EC_COMPENSATION_REFERENCE)
+        except (TypeError, ValueError):
+            return value
+        # Die Entity ist eine Prozentangabe; bei niedrigem EC hebt die Korrektur
+        # sonst ueber 100. Auf die Normalisierung wirkt sich das nicht aus, die
+        # deckelt ohnehin.
+        return round(min(100.0, max(0.0, corrected)), 1)
+
     def _apply_normalization(self) -> None:
         """Setzt den veroeffentlichten Wert aus dem Rohwert.
 
         Rechnet immer aus _raw_value, nie aus dem bereits gesetzten Wert -- so
         ist der Aufruf wiederholbar und kann nicht doppelt skalieren.
+
+        Die EC-Korrektur laeuft in beiden Zweigen, sie haengt nicht an der
+        Normalisierung: der Messwert wandert mit dem EC, ob man ihn hinterher
+        auf eine Skala zieht oder nicht.
 
         Ohne bekanntes Maximum wird nichts veroeffentlicht: der Rohwert ist bei
         eingeschalteter Normalisierung keine Bodenfeuchte dieser Pflanze, und
@@ -837,14 +975,15 @@ class PlantCurrentMoisture(PlantCurrentStatus):
         """
         if self._raw_value is None:
             return
+        value = self._ec_compensated(self._raw_value)
         if not self._normalize:
-            self._attr_native_value = self._raw_value
+            self._attr_native_value = value
             return
         if not self._max_moisture:
             self._attr_native_value = None
             return
         try:
-            normalized = min(100, (float(self._raw_value) / self._max_moisture) * 100)
+            normalized = min(100, (float(value) / self._max_moisture) * 100)
             self._attr_native_value = round(normalized, 1)
         except (ValueError, TypeError):
             pass
@@ -866,6 +1005,7 @@ class PlantCurrentMoisture(PlantCurrentStatus):
             value = float(self._smoothed_value)
         except (TypeError, ValueError):
             return None
+        value = float(self._ec_compensated(value))
         if not self._normalize:
             return value
         if not self._max_moisture:

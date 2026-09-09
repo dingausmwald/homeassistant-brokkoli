@@ -117,7 +117,10 @@
           "humidity_trigger": "Gebruik luchtvochtigheid als probleemtrigger",
           "conductivity_trigger": "Gebruik geleidbaarheid als probleemtrigger",
           "moisture_trigger": "Gebruik bodemvochtigheid als probleemtrigger",
-          "temperature_trigger": "Gebruik temperatuur als probleemtrigger"
+          "temperature_trigger": "Gebruik temperatuur als probleemtrigger",
+          "conductivity_mode": "Conductivity reading",
+          "default_ec_compensation": "Default EC compensation factor",
+          "default_pore_exponent": "Default pore water EC exponent"
         }
       }
     }
@@ -722,6 +725,12 @@
       },
       "min_ph": {
         "name": "Min pH"
+      },
+      "ec_compensation": {
+        "name": "EC compensation factor"
+      },
+      "pore_exponent": {
+        "name": "Pore water EC exponent"
       }
     },
     "select": {

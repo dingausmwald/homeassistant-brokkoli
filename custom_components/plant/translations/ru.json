@@ -117,7 +117,10 @@
           "humidity_trigger": "Использовать влажность воздуха как триггер проблемы",
           "conductivity_trigger": "Использовать проводимость как триггер проблемы",
           "moisture_trigger": "Использовать влажность почвы как триггер проблемы",
-          "temperature_trigger": "Использовать температуру как триггер проблемы"
+          "temperature_trigger": "Использовать температуру как триггер проблемы",
+          "conductivity_mode": "Conductivity reading",
+          "default_ec_compensation": "Default EC compensation factor",
+          "default_pore_exponent": "Default pore water EC exponent"
         }
       }
     }
@@ -722,6 +725,12 @@
       },
       "min_ph": {
         "name": "Min pH"
+      },
+      "ec_compensation": {
+        "name": "EC compensation factor"
+      },
+      "pore_exponent": {
+        "name": "Pore water EC exponent"
       }
     },
     "select": {

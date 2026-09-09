@@ -117,7 +117,10 @@
           "humidity_trigger": "Użyj wilgotności powietrza jako wyzwalacza problemu",
           "conductivity_trigger": "Użyj przewodności jako wyzwalacza problemu",
           "moisture_trigger": "Użyj wilgotności gleby jako wyzwalacza problemu",
-          "temperature_trigger": "Użyj temperatury jako wyzwalacza problemu"
+          "temperature_trigger": "Użyj temperatury jako wyzwalacza problemu",
+          "conductivity_mode": "Conductivity reading",
+          "default_ec_compensation": "Default EC compensation factor",
+          "default_pore_exponent": "Default pore water EC exponent"
         }
       }
     }
@@ -722,6 +725,12 @@
       },
       "min_ph": {
         "name": "Min pH"
+      },
+      "ec_compensation": {
+        "name": "EC compensation factor"
+      },
+      "pore_exponent": {
+        "name": "Pore water EC exponent"
       }
     },
     "select": {

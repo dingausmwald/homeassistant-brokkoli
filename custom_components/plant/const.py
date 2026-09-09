@@ -181,6 +181,36 @@ PPFD_DLI_FACTOR = 0.0036
 # This equals normal sunlight
 DEFAULT_LUX_TO_PPFD = 0.0185
 
+# EC cross-sensitivity of capacitive soil probes.
+#
+# Cheap capacitive probes measure the impedance of the medium, and at their low
+# excitation frequency ionic conduction contributes heavily -- so the moisture
+# channel partly measures the EC. Lower the EC of the nutrient solution and the
+# reading falls although the pot is just as wet. Professional probes run at
+# 70-100 MHz to separate water from ions.
+#
+# The relation is linear in EC, not logarithmic: measured on 8 probes over three
+# days, pooled R2 was 0.49 for M = a + b*EC against 0.36 for a + b*ln(EC). The
+# sensitivity therefore grows with the EC, and a constant background
+# conductivity of the medium needs no parameter of its own -- it is absorbed by
+# the intercept.
+#
+# The correction is subtractive, which matters: a multiplicative one cancels
+# against the normalisation, which divides by a percentile of the same series.
+EC_COMPENSATION_REFERENCE = 1000.0  # uS/cm, the EC at which nothing is corrected
+DEFAULT_EC_COMPENSATION = 0.0  # off; 0.015 measured for Xiaomi/MiFlora in coco
+
+# Pore water EC. Bulk EC mixes water content and salt content, because dry pores
+# do not conduct. Dividing by the water term leaves the concentration in the
+# pore water. The exponent is medium dependent; Archie/Rhoades suggest 1.3-2.0
+# for substrates, but it cannot be derived from the probe data alone.
+ATTR_CONDUCTIVITY_MODE = "conductivity_mode"
+CONDUCTIVITY_MODE_BULK = "bulk"
+CONDUCTIVITY_MODE_PORE_WATER = "pore_water"
+DEFAULT_CONDUCTIVITY_MODE = CONDUCTIVITY_MODE_BULK
+DEFAULT_PORE_EXPONENT = 1.0
+MIN_MOISTURE_FOR_PORE_EC = 15.0  # below this the division is meaningless
+
 SERVICE_REPLACE_SENSOR = "replace_sensor"
 SERVICE_REMOVE_PLANT = "remove_plant"
 SERVICE_REMOVE_CYCLE = "remove_cycle"
@@ -429,6 +459,8 @@ CONF_DEFAULT_MIN_POWER_CONSUMPTION = "default_min_power_consumption"
 CONF_DEFAULT_MAX_POWER_CONSUMPTION = "default_max_power_consumption"
 CONF_DEFAULT_MAX_PH = "default_max_ph"  # Neue Konstanten für pH
 CONF_DEFAULT_MIN_PH = "default_min_ph"
+CONF_DEFAULT_EC_COMPENSATION = "default_ec_compensation"
+CONF_DEFAULT_PORE_EXPONENT = "default_pore_exponent"
 
 # Defaults for the problem triggers, configurable on the configuration node
 CONF_DEFAULT_ILLUMINANCE_TRIGGER = "default_illuminance_trigger"

@@ -40,6 +40,10 @@ from .const import (
     HEALTH_STEP,
     HEALTH_DEFAULT,
     CONF_DEFAULT_HEALTH,
+    DEFAULT_EC_COMPENSATION,
+    CONF_DEFAULT_EC_COMPENSATION,
+    DEFAULT_PORE_EXPONENT,
+    CONF_DEFAULT_PORE_EXPONENT,
 )
 
 from .plant_thresholds import (
@@ -108,6 +112,20 @@ async def async_setup_entry(
         plant,
     )
 
+    # EC cross-sensitivity of the moisture probe
+    ec_compensation = PlantEcCompensation(
+        hass,
+        entry,
+        plant,
+    )
+
+    # Exponent of the pore water EC estimate
+    pore_exponent = PlantPoreExponent(
+        hass,
+        entry,
+        plant,
+    )
+
     # Min/Max Thresholds
     max_moisture = PlantMaxMoisture(hass, entry, plant)
     min_moisture = PlantMinMoisture(hass, entry, plant)
@@ -140,6 +158,8 @@ async def async_setup_entry(
         flowering_duration,
         health_number,
         lux_to_ppfd,
+        ec_compensation,
+        pore_exponent,
         max_moisture,
         min_moisture,
         max_temperature,
@@ -170,6 +190,8 @@ async def async_setup_entry(
     plant.add_flowering_duration(flowering_duration)
     plant.add_health_number(health_number)
     plant.add_lux_to_ppfd(lux_to_ppfd)
+    plant.add_ec_compensation(ec_compensation)
+    plant.add_pore_exponent(pore_exponent)
     plant.add_thresholds(
         max_moisture=max_moisture,
         min_moisture=min_moisture,
@@ -832,5 +854,124 @@ class PlantLuxToPpfd(NumberEntity, RestoreEntity):
                     self._attr_native_value = float(last_state.state)
                 except (TypeError, ValueError):
                     self._attr_native_value = DEFAULT_LUX_TO_PPFD
+
+
+class _PlantGlobalDefaultNumber(NumberEntity, RestoreEntity):
+    """A per-plant factor that starts from a global default.
+
+    Same shape as PlantLuxToPpfd, but the initial value comes from the
+    configuration node instead of a constant, so a grower sets the value that
+    fits their probes once and every new plant inherits it.
+
+    Subclasses set: default_const, config_key, _attr_unique_id suffix, range.
+    """
+
+    _attr_has_entity_name = True
+
+    default_const: float = 0.0
+    config_key: str = ""
+
+    def __init__(self, hass: HomeAssistant, config: ConfigEntry, plant_device) -> None:
+        self._hass = hass
+        self._config = config
+        self._plant = plant_device
+        self._attr_entity_category = EntityCategory.CONFIG
+        self._attr_mode = NumberMode.BOX
+
+        # Global default from the configuration node. "is_config" is the flag
+        # the config flow actually writes.
+        default_value = self.default_const
+        for entry in hass.config_entries.async_entries(DOMAIN):
+            if entry.data.get("is_config", False):
+                default_value = entry.data.get(FLOW_PLANT_INFO, {}).get(
+                    self.config_key, self.default_const
+                )
+                break
+        self._attr_native_value = default_value
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device info."""
+        return DeviceInfo(identifiers={(DOMAIN, self._plant.unique_id)})
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Update the current value."""
+        self._attr_native_value = value
+        self.async_write_ha_state()
+        # The moisture sensor reads this on every calculation, but nothing tells
+        # it the factor moved -- push a recalculation so the change is visible
+        # at once instead of at the next poll.
+        await self._notify_sensors()
+
+    async def _notify_sensors(self) -> None:
+        """Recalculate whatever depends on this factor."""
+        return
+
+    async def async_added_to_hass(self) -> None:
+        """Handle entity which will be added."""
+        await super().async_added_to_hass()
+
+        if not self._config.data[FLOW_PLANT_INFO].get(ATTR_IS_NEW_PLANT, False):
+            # Neustart - stelle letzten Zustand wieder her
+            last_state = await self.async_get_last_state()
+            if last_state is not None:
+                try:
+                    self._attr_native_value = float(last_state.state)
+                except (TypeError, ValueError):
+                    pass
+
+
+class PlantEcCompensation(_PlantGlobalDefaultNumber):
+    """Moisture points removed per uS/cm of EC above the reference.
+
+    Capacitive probes read the EC into their moisture channel. 0 disables the
+    correction; 0.015 was measured for Xiaomi/MiFlora probes in coco.
+    """
+
+    _attr_translation_key = "ec_compensation"
+
+    default_const = DEFAULT_EC_COMPENSATION
+    config_key = CONF_DEFAULT_EC_COMPENSATION
+
+    def __init__(self, hass: HomeAssistant, config: ConfigEntry, plant_device) -> None:
+        self._attr_unique_id = f"{config.entry_id}_ec_compensation"
+        self._attr_native_min_value = 0
+        self._attr_native_max_value = 0.1
+        self._attr_native_step = 0.001
+        self._attr_icon = "mdi:water-percent-alert"
+        super().__init__(hass, config, plant_device)
+
+    async def _notify_sensors(self) -> None:
+        sensor = getattr(self._plant, "sensor_moisture", None)
+        if sensor is not None and getattr(sensor, "hass", None) is not None:
+            await sensor.async_update()
+            sensor.async_write_ha_state()
+
+
+class PlantPoreExponent(_PlantGlobalDefaultNumber):
+    """Exponent of the water term in the pore water EC estimate.
+
+    Bulk EC is divided by (moisture/100)**p. Only used when the conductivity
+    sensor runs in pore water mode.
+    """
+
+    _attr_translation_key = "pore_exponent"
+
+    default_const = DEFAULT_PORE_EXPONENT
+    config_key = CONF_DEFAULT_PORE_EXPONENT
+
+    def __init__(self, hass: HomeAssistant, config: ConfigEntry, plant_device) -> None:
+        self._attr_unique_id = f"{config.entry_id}_pore_exponent"
+        self._attr_native_min_value = 0.5
+        self._attr_native_max_value = 2.5
+        self._attr_native_step = 0.05
+        self._attr_icon = "mdi:flask-outline"
+        super().__init__(hass, config, plant_device)
+
+    async def _notify_sensors(self) -> None:
+        sensor = getattr(self._plant, "sensor_conductivity", None)
+        if sensor is not None and getattr(sensor, "hass", None) is not None:
+            await sensor.async_update()
+            sensor.async_write_ha_state()
 
 

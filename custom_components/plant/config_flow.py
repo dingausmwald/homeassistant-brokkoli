@@ -31,6 +31,14 @@ from homeassistant.helpers.selector import selector
 
 # Local Imports
 from .const import (
+    ATTR_CONDUCTIVITY_MODE,
+    CONDUCTIVITY_MODE_BULK,
+    CONDUCTIVITY_MODE_PORE_WATER,
+    DEFAULT_CONDUCTIVITY_MODE,
+    CONF_DEFAULT_EC_COMPENSATION,
+    CONF_DEFAULT_PORE_EXPONENT,
+    DEFAULT_EC_COMPENSATION,
+    DEFAULT_PORE_EXPONENT,
     AGGREGATION_MEDIAN,
     AGGREGATION_MEAN,
     AGGREGATION_MIN,
@@ -266,6 +274,8 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     "default_normalize_moisture": False,
                     "default_normalize_window": DEFAULT_NORMALIZE_WINDOW,
                     "default_normalize_percentile": DEFAULT_NORMALIZE_PERCENTILE,
+                    CONF_DEFAULT_EC_COMPENSATION: DEFAULT_EC_COMPENSATION,
+                    CONF_DEFAULT_PORE_EXPONENT: DEFAULT_PORE_EXPONENT,
 
                     # Default Aggregationsmethoden für Cycle
                     "default_growth_phase_aggregation": "min",
@@ -1014,6 +1024,8 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     "default_normalize_moisture": "default_normalize_moisture",
                     "default_normalize_window": "default_normalize_window",
                     "default_normalize_percentile": "default_normalize_percentile",
+                    CONF_DEFAULT_EC_COMPENSATION: CONF_DEFAULT_EC_COMPENSATION,
+                    CONF_DEFAULT_PORE_EXPONENT: CONF_DEFAULT_PORE_EXPONENT,
                     CONF_DEFAULT_MAX_MOISTURE: CONF_DEFAULT_MAX_MOISTURE,
                     CONF_DEFAULT_MIN_MOISTURE: CONF_DEFAULT_MIN_MOISTURE,
                     CONF_DEFAULT_MAX_ILLUMINANCE: CONF_DEFAULT_MAX_ILLUMINANCE,
@@ -1141,7 +1153,17 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                             normalize_changed = True
                         data[FLOW_PLANT_INFO][ATTR_NORMALIZE_PERCENTILE] = new_percentile
 
-                    if normalize_changed:
+                    new_conductivity_mode = user_input.get(ATTR_CONDUCTIVITY_MODE)
+                    conductivity_mode_changed = False
+                    if new_conductivity_mode is not None:
+                        old_conductivity_mode = data[FLOW_PLANT_INFO].get(
+                            ATTR_CONDUCTIVITY_MODE, DEFAULT_CONDUCTIVITY_MODE
+                        )
+                        if new_conductivity_mode != old_conductivity_mode:
+                            conductivity_mode_changed = True
+                        data[FLOW_PLANT_INFO][ATTR_CONDUCTIVITY_MODE] = new_conductivity_mode
+
+                    if normalize_changed or conductivity_mode_changed:
                         self.hass.config_entries.async_update_entry(self.entry, data=data)
                         
                         # Sensoren direkt aktualisieren
@@ -1152,10 +1174,11 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                             self.plant.sensor_moisture._max_moisture = None
                             self.plant.sensor_moisture._last_normalize_update = None
                             await self.plant.sensor_moisture.async_update()
+
+                    if conductivity_mode_changed and self.plant.sensor_conductivity:
+                        self.plant.sensor_conductivity._mode = new_conductivity_mode
+                        await self.plant.sensor_conductivity.async_update()
                         
-                        if self.plant.sensor_conductivity:
-                            self.plant.sensor_conductivity._normalize = new_normalize
-                            await self.plant.sensor_conductivity.async_update()
 
                 # Bestehende Validierung für andere Felder
                 if ATTR_STRAIN in user_input and not re.match(r"\w+", user_input[ATTR_STRAIN]):
@@ -1322,6 +1345,14 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     default=self.entry.data[FLOW_PLANT_INFO].get("default_normalize_percentile", DEFAULT_NORMALIZE_PERCENTILE)
                 ): cv.positive_int,
                 vol.Optional(
+                    CONF_DEFAULT_EC_COMPENSATION,
+                    default=self.entry.data[FLOW_PLANT_INFO].get(CONF_DEFAULT_EC_COMPENSATION, DEFAULT_EC_COMPENSATION)
+                ): vol.Coerce(float),
+                vol.Optional(
+                    CONF_DEFAULT_PORE_EXPONENT,
+                    default=self.entry.data[FLOW_PLANT_INFO].get(CONF_DEFAULT_PORE_EXPONENT, DEFAULT_PORE_EXPONENT)
+                ): vol.Coerce(float),
+                vol.Optional(
                     "default_cycle_icon",
                     default=self.entry.data[FLOW_PLANT_INFO].get("default_cycle_icon", "🔄")
                 ): str,
@@ -1458,6 +1489,14 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 data_schema[
                     vol.Optional(ATTR_NORMALIZE_PERCENTILE, default=current_percentile)
                 ] = cv.positive_int
+
+                # Leitfaehigkeit: Bulk-Messwert oder Porenwasser-Schaetzung
+                current_conductivity_mode = self.entry.data[FLOW_PLANT_INFO].get(
+                    ATTR_CONDUCTIVITY_MODE, DEFAULT_CONDUCTIVITY_MODE
+                )
+                data_schema[
+                    vol.Optional(ATTR_CONDUCTIVITY_MODE, default=current_conductivity_mode)
+                ] = vol.In([CONDUCTIVITY_MODE_BULK, CONDUCTIVITY_MODE_PORE_WATER])
 
                 # Füge Sensor-Auswahl hinzu
                 # Hole alle verfügbaren Sensoren

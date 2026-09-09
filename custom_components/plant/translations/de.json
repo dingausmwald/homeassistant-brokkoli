@@ -187,7 +187,10 @@
           "default_water_consumption_trigger": "Standard: Wasserverbrauch als Problemauslöser verwenden",
           "default_fertilizer_consumption_trigger": "Standard: Düngerverbrauch als Problemauslöser verwenden",
           "default_power_consumption_trigger": "Standard: Stromverbrauch als Problemauslöser verwenden",
-          "default_ph_trigger": "Standard: pH als Problemauslöser verwenden"
+          "default_ph_trigger": "Standard: pH als Problemauslöser verwenden",
+          "conductivity_mode": "Leitfähigkeitswert",
+          "default_ec_compensation": "Standard EC-Korrekturfaktor",
+          "default_pore_exponent": "Standard Porenwasser-EC-Exponent"
         }
       }
     }
@@ -795,6 +798,12 @@
       },
       "min_ph": {
         "name": "Min pH"
+      },
+      "ec_compensation": {
+        "name": "EC-Korrekturfaktor"
+      },
+      "pore_exponent": {
+        "name": "Porenwasser-EC-Exponent"
       }
     },
     "select": {

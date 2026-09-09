@@ -117,7 +117,10 @@
           "humidity_trigger": "Légnedvesség használata probléma kiváltóként",
           "conductivity_trigger": "Vezetőképesség használata probléma kiváltóként",
           "moisture_trigger": "Talaj nedvesség használata probléma kiváltóként",
-          "temperature_trigger": "Hőmérséklet használata probléma kiváltóként"
+          "temperature_trigger": "Hőmérséklet használata probléma kiváltóként",
+          "conductivity_mode": "Conductivity reading",
+          "default_ec_compensation": "Default EC compensation factor",
+          "default_pore_exponent": "Default pore water EC exponent"
         }
       }
     }
@@ -722,6 +725,12 @@
       },
       "min_ph": {
         "name": "Min pH"
+      },
+      "ec_compensation": {
+        "name": "EC compensation factor"
+      },
+      "pore_exponent": {
+        "name": "Pore water EC exponent"
       }
     },
     "select": {

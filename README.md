@@ -23,6 +23,63 @@ A Home Assistant integration for monitoring cannabis plants with sensors and con
 - **Power**: Power consumption monitoring
 - **Daily Light Integral (DLI)**: Calculated from light sensors
 
+### EC compensation for capacitive soil probes
+
+Cheap capacitive probes measure the impedance of the medium. At their low
+excitation frequency ionic conduction contributes heavily, so the moisture
+channel partly measures the EC: lower the EC of your nutrient solution and the
+moisture reading drops although the pot is just as wet. Professional probes run
+at 70–100 MHz to separate water from ions; these do not.
+
+Each plant has an **EC compensation factor** (a `number` entity, next to the
+lux-to-PPFD factor). It removes the EC term from the reading:
+
+```
+moisture = raw − factor × (EC − 1000 µS/cm)
+```
+
+`0` disables it, which is the default — nothing changes until you set a factor.
+A global starting value for new plants lives in the integration configuration.
+
+| Probe | Sensing | Factor (points per 1000 µS/cm) | Basis |
+|---|---|---|---|
+| Xiaomi / MiFlora (HHCCJCY01) | capacitive, low excitation frequency | **0.015** (individual probes 0.011–0.046) | 8 probes, 3 days, R² up to 0.98 |
+| anything else | unknown | 0 (off) | — |
+
+**Determining your own factor.** Compare the reading at full saturation after
+two waterings with clearly different EC, then `factor = Δmoisture / ΔEC`.
+
+Two things will spoil that measurement:
+
+- **A probe sitting near its 100 % ceiling.** Readings are compressed there, and
+  they drag the factor down — in our data one probe measured 0.028 including
+  those points and 0.046 without them. Exclude everything near the ceiling. A
+  probe that often reads 100 should be repositioned anyway: at the stop it
+  measures nothing at all.
+- **Comparing at different water contents.** Bulk EC falls as the pot dries, so
+  read both the moisture and the EC at the same point in the cycle — right after
+  watering is the reproducible one.
+
+The 0.015 comes from a single setup in coco. The spread between individual
+probes is real, and a different substrate or a different make will need its own
+value. If you determine one, please open an issue so this table can grow.
+
+### Pore water EC (optional)
+
+Bulk EC mixes water content and salt content, because dry pores do not conduct —
+in our measurements it swung 25–59 % within a single irrigation cycle without
+any nutrient being added. Switching a plant's **conductivity reading** to
+`pore_water` divides that out:
+
+```
+EC_pore = EC_bulk / (moisture/100) ^ exponent
+```
+
+The exponent is medium dependent and has its own `number` entity per plant.
+Archie/Rhoades suggest 1.3–2.0 for substrates; the default is 1.0. It cannot be
+derived from the probe data alone, so tune it against a feed EC you know. Below
+15 % moisture the bulk value is published unchanged.
+
 ### Seedfinder Integration
 - Strain data fetching during setup
 - Strain images and basic information
