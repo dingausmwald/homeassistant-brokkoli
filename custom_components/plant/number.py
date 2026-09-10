@@ -942,10 +942,11 @@ class PlantEcCompensation(_PlantGlobalDefaultNumber):
         super().__init__(hass, config, plant_device)
 
     async def _notify_sensors(self) -> None:
-        sensor = getattr(self._plant, "sensor_moisture", None)
-        if sensor is not None and getattr(sensor, "hass", None) is not None:
-            await sensor.async_update()
-            sensor.async_write_ha_state()
+        # Moisture first: in pore water mode the conductivity divides by it.
+        for name in ("sensor_moisture", "sensor_conductivity"):
+            sensor = getattr(self._plant, name, None)
+            if sensor is not None and getattr(sensor, "hass", None) is not None:
+                await sensor.async_rescale()
 
 
 class PlantPoreExponent(_PlantGlobalDefaultNumber):
@@ -971,7 +972,6 @@ class PlantPoreExponent(_PlantGlobalDefaultNumber):
     async def _notify_sensors(self) -> None:
         sensor = getattr(self._plant, "sensor_conductivity", None)
         if sensor is not None and getattr(sensor, "hass", None) is not None:
-            await sensor.async_update()
-            sensor.async_write_ha_state()
+            await sensor.async_rescale()
 
 

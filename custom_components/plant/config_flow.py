@@ -1167,7 +1167,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                         self.hass.config_entries.async_update_entry(self.entry, data=data)
                         
                         # Sensoren direkt aktualisieren
-                        if self.plant.sensor_moisture:
+                        if normalize_changed and self.plant.sensor_moisture:
                             self.plant.sensor_moisture._normalize = new_normalize
                             self.plant.sensor_moisture._normalize_window = new_window
                             self.plant.sensor_moisture._normalize_percentile = new_percentile
@@ -1177,7 +1177,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
                     if conductivity_mode_changed and self.plant.sensor_conductivity:
                         self.plant.sensor_conductivity._mode = new_conductivity_mode
-                        await self.plant.sensor_conductivity.async_update()
+                        await self.plant.sensor_conductivity.async_rescale()
                         
 
                 # Bestehende Validierung für andere Felder

@@ -40,10 +40,13 @@ moisture = raw − factor × (EC − 1000 µS/cm)
 
 `0` disables it, which is the default — nothing changes until you set a factor.
 A global starting value for new plants lives in the integration configuration.
+The correction needs the plant's conductivity sensor; a plant without one keeps
+its uncorrected reading. With normalisation on, the maximum is taken over the
+corrected readings, so a saturated pot still reads 100 %.
 
-| Probe | Sensing | Factor (points per 1000 µS/cm) | Basis |
+| Probe | Sensing | Factor (moisture points per µS/cm) | Basis |
 |---|---|---|---|
-| Xiaomi / MiFlora (HHCCJCY01) | capacitive, low excitation frequency | **0.015** (individual probes 0.011–0.046) | 8 probes, 3 days, R² up to 0.98 |
+| Xiaomi / MiFlora (HHCCJCY01) | capacitive, low excitation frequency | **0.015** (individual probes roughly 0.01–0.03) | 8 probes in coco, 14 days, one change of the nutrient EC |
 | anything else | unknown | 0 (off) | — |
 
 **Determining your own factor.** Compare the reading at full saturation after
@@ -52,10 +55,17 @@ two waterings with clearly different EC, then `factor = Δmoisture / ΔEC`.
 Two things will spoil that measurement:
 
 - **A probe sitting near its 100 % ceiling.** Readings are compressed there, and
-  they drag the factor down — in our data one probe measured 0.028 including
-  those points and 0.046 without them. Exclude everything near the ceiling. A
-  probe that often reads 100 should be repositioned anyway: at the stop it
-  measures nothing at all.
+  they drag the factor down. Exclude everything near the ceiling. A probe that
+  often reads 100 should be repositioned anyway: at the stop it measures nothing
+  at all.
+- **A single pair of days.** The value one probe seems to need can change by a
+  factor of two from one day to the next. Use one factor for all probes of a
+  make rather than one per probe.
+
+The factor is determined at saturation. As the pot dries, the bulk EC falls with
+the water content and the correction lifts the reading; in our data the driest
+normalised values came out 5–10 points higher than without it. Check your
+minimum moisture thresholds after switching it on.
 - **Comparing at different water contents.** Bulk EC falls as the pot dries, so
   read both the moisture and the EC at the same point in the cycle — right after
   watering is the reproducible one.
@@ -77,8 +87,10 @@ EC_pore = EC_bulk / (moisture/100) ^ exponent
 
 The exponent is medium dependent and has its own `number` entity per plant.
 Archie/Rhoades suggest 1.3–2.0 for substrates; the default is 1.0. It cannot be
-derived from the probe data alone, so tune it against a feed EC you know. Below
-15 % moisture the bulk value is published unchanged.
+derived from the probe data alone, and a known feed EC does not pin it down
+either: at saturation the division is by 1, whatever the exponent. The result
+stays on the probe's own bulk scale — at saturation it equals the bulk reading,
+not the EC of the solution. Below 15 % moisture nothing is published.
 
 ### Seedfinder Integration
 - Strain data fetching during setup
