@@ -922,10 +922,10 @@ class _PlantGlobalDefaultNumber(NumberEntity, RestoreEntity):
 
 
 class PlantEcCompensation(_PlantGlobalDefaultNumber):
-    """Moisture points removed per uS/cm of EC above the reference.
+    """Moisture points removed per e-fold of the probe EC above the reference.
 
     Capacitive probes read the EC into their moisture channel. 0 disables the
-    correction; 0.015 was measured for Xiaomi/MiFlora probes in coco.
+    correction; 19.7 was measured for Xiaomi/MiFlora probes in coco.
     """
 
     _attr_translation_key = "ec_compensation"
@@ -936,8 +936,8 @@ class PlantEcCompensation(_PlantGlobalDefaultNumber):
     def __init__(self, hass: HomeAssistant, config: ConfigEntry, plant_device) -> None:
         self._attr_unique_id = f"{config.entry_id}_ec_compensation"
         self._attr_native_min_value = 0
-        self._attr_native_max_value = 0.1
-        self._attr_native_step = 0.001
+        self._attr_native_max_value = 50
+        self._attr_native_step = 0.1
         self._attr_icon = "mdi:water-percent-alert"
         super().__init__(hass, config, plant_device)
 
@@ -964,7 +964,7 @@ class PlantPoreExponent(_PlantGlobalDefaultNumber):
     def __init__(self, hass: HomeAssistant, config: ConfigEntry, plant_device) -> None:
         self._attr_unique_id = f"{config.entry_id}_pore_exponent"
         self._attr_native_min_value = 0.5
-        self._attr_native_max_value = 2.5
+        self._attr_native_max_value = 4.0
         self._attr_native_step = 0.05
         self._attr_icon = "mdi:flask-outline"
         super().__init__(hass, config, plant_device)

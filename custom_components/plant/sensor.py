@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 import inspect
 import logging
+import math
 import random
 from statistics import median_low, quantiles
 from typing import Any
@@ -69,6 +70,7 @@ from .const import (
     CONDUCTIVITY_MODE_PORE_WATER,
     DEFAULT_CONDUCTIVITY_MODE,
     DEFAULT_PORE_EXPONENT,
+    PORE_WATER_SCALE,
     MIN_MOISTURE_FOR_PORE_EC,
     DOMAIN,
     DOMAIN_SENSOR,
@@ -604,6 +606,7 @@ class PlantCurrentConductivity(PlantCurrentStatus):
                 "mode": self._mode,
                 "raw_value": self._raw_value,
                 "moisture_used": self._moisture_for_pore_ec(),
+                "scale": PORE_WATER_SCALE,
                 "exponent": self._pore_exponent(),
             }
         })
@@ -627,23 +630,25 @@ class PlantCurrentConductivity(PlantCurrentStatus):
             return DEFAULT_PORE_EXPONENT
 
     def _moisture_for_pore_ec(self):
-        """Die veroeffentlichte Bodenfeuchte der Pflanze, oder None."""
+        """The moisture the pore water estimate divides by, or None.
+
+        The moisture sensor's normalised reading without the EC correction, see
+        PlantCurrentMoisture.pore_water_moisture. None below the floor, where
+        the division would blow the value up.
+        """
         sensor = getattr(self._plant, "sensor_moisture", None)
-        value = getattr(sensor, "native_value", None) if sensor else None
-        if value is None:
-            return None
-        try:
-            moisture = float(value)
-        except (TypeError, ValueError):
+        moisture = getattr(sensor, "pore_water_moisture", None) if sensor else None
+        if moisture is None:
             return None
         return moisture if moisture >= MIN_MOISTURE_FOR_PORE_EC else None
 
     def _apply_mode(self) -> None:
         """Set the published value from the raw reading.
 
-        Bulk EC mixes water content and salt content, because dry pores do not
-        conduct. Dividing by the water term leaves the concentration in the
-        pore solution.
+        The probe reads the pot as a whole, and its EC falls as the pot dries
+        although no salt leaves. Dividing by the water term and scaling to the
+        solution leaves the EC of the pore water; const.py records how scale
+        and exponent were determined.
 
         Always computed from _raw_value, so calling it again cannot compound.
 
@@ -667,7 +672,11 @@ class PlantCurrentConductivity(PlantCurrentStatus):
             self._attr_native_value = None
             return
         try:
-            pore = float(self._raw_value) / (moisture / 100.0) ** self._pore_exponent()
+            pore = (
+                PORE_WATER_SCALE
+                * float(self._raw_value)
+                / (moisture / 100.0) ** self._pore_exponent()
+            )
             self._attr_native_value = round(pore, 1)
         except (ValueError, TypeError, ZeroDivisionError, OverflowError):
             self._attr_native_value = None
@@ -749,6 +758,7 @@ class PlantCurrentMoisture(PlantCurrentStatus):
             ATTR_NORMALIZE_PERCENTILE, DEFAULT_NORMALIZE_PERCENTILE
         )
         self._max_moisture = None
+        self._max_moisture_raw = None  # same percentile without EC correction
         self._last_normalize_update = None
 
         self._smooth_buffer = []  # (timestamp, reading, EC at that reading)
@@ -817,11 +827,19 @@ class PlantCurrentMoisture(PlantCurrentStatus):
 
         values = self._corrected_history(history_list[self._external_sensor], ec_states)
 
+        # The pore water EC divides by the moisture without the correction, so
+        # the maximum of the uncorrected readings is kept as well.
+        raw_values = []
+        for state in history_list[self._external_sensor]:
+            try:
+                raw_values.append(float(state.state))
+            except (TypeError, ValueError):
+                continue
+        raw_max = self._percentile(raw_values)
+        self._max_moisture_raw = raw_max if raw_max and raw_max > 0 else None
+
         if values:
-            percentile_index = min(
-                len(values) - 1, int(len(values) * self._normalize_percentile / 100)
-            )
-            maximum = sorted(values)[percentile_index]
+            maximum = self._percentile(values)
             if maximum <= 0:
                 self._max_moisture = None
                 self._last_normalize_update = now
@@ -868,7 +886,7 @@ class PlantCurrentMoisture(PlantCurrentStatus):
         elif ec is None:
             correction = None
         else:
-            correction = round(-factor * (ec - EC_COMPENSATION_REFERENCE), 1)
+            correction = round(-factor * math.log(ec / EC_COMPENSATION_REFERENCE), 1)
         attributes.update({
             "moisture_ec_compensation": {
                 "coefficient": factor,
@@ -879,6 +897,36 @@ class PlantCurrentMoisture(PlantCurrentStatus):
         })
 
         return attributes
+
+    def _percentile(self, values):
+        """The configured percentile of the window, or None for an empty one."""
+        if not values:
+            return None
+        ordered = sorted(values)
+        index = min(len(ordered) - 1, int(len(ordered) * self._normalize_percentile / 100))
+        return ordered[index]
+
+    @property
+    def pore_water_moisture(self):
+        """The moisture the pore water EC divides by, or None.
+
+        Normalised like the published value, but without the EC correction: the
+        exponent was determined on the uncorrected reading, and subtracting the
+        EC term shifts the ratio between a wet and a dry pot the division rests
+        on. Normalising only scales, which leaves that ratio alone and puts a
+        saturated pot at 100 %, where the division is by 1.
+        """
+        if self._raw_value is None:
+            return None
+        try:
+            value = float(self._raw_value)
+        except (TypeError, ValueError):
+            return None
+        if self._normalize:
+            if not self._max_moisture_raw:
+                return None
+            value = value / self._max_moisture_raw * 100
+        return min(100.0, max(0.0, value))
 
     def _prune_smooth_buffer(self) -> None:
         """Drop readings that have left the smoothing window."""
@@ -961,7 +1009,7 @@ class PlantCurrentMoisture(PlantCurrentStatus):
         self._smoothed_value = median_low(values)
 
     def _ec_factor(self) -> float:
-        """Feuchte-Punkte je uS/cm, die der EC dem Messwert aufschlaegt."""
+        """Moisture points per e-fold of the probe EC (the plant's factor entity)."""
         entity = getattr(self._plant, "ec_compensation", None)
         value = getattr(entity, "native_value", None) if entity else None
         if value is None:
@@ -1016,6 +1064,9 @@ class PlantCurrentMoisture(PlantCurrentStatus):
         correction is on but that EC is unknown, None comes back rather than
         the uncorrected reading, which would jump by the whole correction.
 
+        Logarithmic in the probe EC, relative to the lowest EC the effect was
+        measured at; const.py records how it was determined.
+
         Unclamped: the caller clamps after normalising, and the maximum is
         taken over unclamped values, so both sides of the division match.
         """
@@ -1027,7 +1078,7 @@ class PlantCurrentMoisture(PlantCurrentStatus):
             return numeric
         if ec is None:
             return None
-        return numeric - self._ec_factor() * (ec - EC_COMPENSATION_REFERENCE)
+        return numeric - self._ec_factor() * math.log(ec / EC_COMPENSATION_REFERENCE)
 
     def _corrected_history(self, moisture_states, ec_states) -> list[float]:
         """The window's readings on the scale the published value is computed on.

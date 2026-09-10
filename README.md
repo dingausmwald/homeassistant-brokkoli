@@ -27,70 +27,63 @@ A Home Assistant integration for monitoring cannabis plants with sensors and con
 
 Cheap capacitive probes measure the impedance of the medium. At their low
 excitation frequency ionic conduction contributes heavily, so the moisture
-channel partly measures the EC: lower the EC of your nutrient solution and the
-moisture reading drops although the pot is just as wet. Professional probes run
-at 70–100 MHz to separate water from ions; these do not.
+channel partly measures the EC: flush a pot or lower the EC of the nutrient
+solution and the moisture reading drops although the pot is just as wet.
 
-Each plant has an **EC compensation factor** (a `number` entity, next to the
-lux-to-PPFD factor). It removes the EC term from the reading:
+The integration takes the probe's own EC out of the moisture reading:
 
 ```
-moisture = raw − factor × (EC − 1000 µS/cm)
+moisture = raw − factor × ln(EC / 180 µS/cm)
 ```
 
-`0` disables it, which is the default — nothing changes until you set a factor.
-A global starting value for new plants lives in the integration configuration.
-The correction needs the plant's conductivity sensor; a plant without one keeps
-its uncorrected reading. With normalisation on, the maximum is taken over the
-corrected readings, so a saturated pot still reads 100 %.
+Each plant has an **EC compensation factor** (a `number` entity); new plants
+start from the default in the integration configuration. `0` disables it. For
+Xiaomi/MiFlora probes in coco use **19.7** — the same value for every plant.
+With normalisation on, the maximum is taken over the corrected readings, so a
+saturated pot still reads 100 %.
 
-| Probe | Sensing | Factor (moisture points per µS/cm) | Basis |
-|---|---|---|---|
-| Xiaomi / MiFlora (HHCCJCY01) | capacitive, low excitation frequency | **0.015** (individual probes roughly 0.01–0.03) | 8 probes in coco, 14 days, one change of the nutrient EC |
-| anything else | unknown | 0 (off) | — |
+**Where the numbers come from.** Eight Xiaomi/MiFlora (HHCCJCY01) probes in
+coco, evaluated per irrigation event over two weeks that included lowering the
+nutrient EC and a three-day flush that halved the EC in the pots:
 
-**Determining your own factor.** Compare the reading at full saturation after
-two waterings with clearly different EC, then `factor = Δmoisture / ΔEC`.
+- The reading follows the EC the probe itself measures, not the EC of the feed.
+- With one factor for all probes the relation is logarithmic, not linear: each
+  doubling of the probe EC adds about 13.7 moisture points.
+- The effect shows down to the lowest EC measured, 180 µS/cm, without a
+  threshold. A logarithm has no zero point, so the reference is that lowest
+  measured EC: everything the data show is removed, nothing below it is
+  extrapolated. With normalisation the reference only moves the driest values.
+- Fitted on the days before the EC change, the correction held the field
+  capacity through the flush to within 4.9 points on average (uncorrected 12.3,
+  linear 6.8).
 
-Two things will spoil that measurement:
-
-- **A probe sitting near its 100 % ceiling.** Readings are compressed there, and
-  they drag the factor down. Exclude everything near the ceiling. A probe that
-  often reads 100 should be repositioned anyway: at the stop it measures nothing
-  at all.
-- **A single pair of days.** The value one probe seems to need can change by a
-  factor of two from one day to the next. Use one factor for all probes of a
-  make rather than one per probe.
-
-The factor is determined at saturation. As the pot dries, the bulk EC falls with
-the water content and the correction lifts the reading; in our data the driest
-normalised values came out 5–10 points higher than without it. Check your
-minimum moisture thresholds after switching it on.
-- **Comparing at different water contents.** Bulk EC falls as the pot dries, so
-  read both the moisture and the EC at the same point in the cycle — right after
-  watering is the reproducible one.
-
-The 0.015 comes from a single setup in coco. The spread between individual
-probes is real, and a different substrate or a different make will need its own
-value. If you determine one, please open an issue so this table can grow.
+A probe that sits at its 100 % ceiling in a wet pot cannot be corrected — the
+reading is cut off. Position probes so they read below about 95 when saturated.
 
 ### Pore water EC (optional)
 
-Bulk EC mixes water content and salt content, because dry pores do not conduct —
-in our measurements it swung 25–59 % within a single irrigation cycle without
-any nutrient being added. Switching a plant's **conductivity reading** to
-`pore_water` divides that out:
+The probe reads the EC of the pot as a whole — water, coco and air. Even a pot
+flushed with 1640 µS/cm reads about 600, and the reading falls as the pot dries
+although no salt leaves. Switching a plant's **conductivity reading** to
+`pore_water` converts it to the EC of the solution around the roots:
 
 ```
-EC_pore = EC_bulk / (moisture/100) ^ exponent
+EC_pore = 2.7 × EC_probe / (moisture/100) ^ exponent
 ```
 
-The exponent is medium dependent and has its own `number` entity per plant.
-Archie/Rhoades suggest 1.3–2.0 for substrates; the default is 1.0. It cannot be
-derived from the probe data alone, and a known feed EC does not pin it down
-either: at saturation the division is by 1, whatever the exponent. The result
-stays on the probe's own bulk scale — at saturation it equals the bulk reading,
-not the EC of the solution. Below 15 % moisture nothing is published.
+- **Scale 2.7.** After three days of flushing with 1640 µS/cm, three probes in
+  different pots agreed within 3 % at about 600 right after watering.
+- **Exponent 2.0**, a `number` entity per plant. Over 176 drying cycles the
+  probe EC followed the moisture with an exponent of 2.1. With it the pore value
+  stays flat through a cycle — unless the plant concentrates the solution while
+  drinking (it rises) or takes up more nutrient than water (it falls), which is
+  what the value is there to show. Change it only for a different medium.
+- **Moisture** is the normalised reading without the EC correction. Keep
+  normalisation on: the division assumes a saturated pot reads 100 %.
+- Below 50 % moisture nothing is published; with exponent 2 the division would
+  blow the value up.
+
+In this mode the conductivity thresholds are in µS/cm of the solution.
 
 ### Seedfinder Integration
 - Strain data fetching during setup

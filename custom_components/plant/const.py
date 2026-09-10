@@ -185,31 +185,53 @@ DEFAULT_LUX_TO_PPFD = 0.0185
 #
 # Cheap capacitive probes measure the impedance of the medium, and at their low
 # excitation frequency ionic conduction contributes heavily -- so the moisture
-# channel partly measures the EC. Lower the EC of the nutrient solution and the
-# reading falls although the pot is just as wet. Professional probes run at
-# 70-100 MHz to separate water from ions.
+# channel partly measures the EC. Lower the EC in the pot and the reading falls
+# although the pot is just as wet.
 #
-# The relation is linear in EC, not logarithmic: measured on 8 probes over three
-# days, pooled R2 was 0.49 for M = a + b*EC against 0.36 for a + b*ln(EC). The
-# sensitivity therefore grows with the EC, and a constant background
-# conductivity of the medium needs no parameter of its own -- it is absorbed by
-# the intercept.
+#     moisture = raw - factor * ln(EC / EC_COMPENSATION_REFERENCE)
 #
-# The correction is subtractive, which matters: a multiplicative one cancels
-# against the normalisation, which divides by a percentile of the same series.
-EC_COMPENSATION_REFERENCE = 1000.0  # uS/cm, the EC at which nothing is corrected
-DEFAULT_EC_COMPENSATION = 0.0  # off; 0.015 measured for Xiaomi/MiFlora in coco
+# Determined on 8 Xiaomi/MiFlora probes in coco from the drained field capacity
+# after each irrigation, 28.08.-10.09.2026: 570 events, including a lowered
+# nutrient EC and a three-day flush that halved the EC in the pots.
+# - The reading follows the probe's own EC, not the EC of the feed (R2 within a
+#   day 0.72 against 0.05).
+# - With one factor for all probes the relation is logarithmic: EC^q fits best
+#   at q 0.1-0.3, linear clearly worse (R2 0.62 against 0.72). A doubling of the
+#   probe EC adds about 13.7 points, a factor of 19.7.
+# - There is no threshold below which the EC stops acting, down to the lowest
+#   EC measured, 180 uS/cm. A logarithm has no zero point, so the reference is
+#   that lowest measured EC: all of the effect the data show is removed, and
+#   nothing below it is extrapolated.
+# - Fitted on the days before the EC was lowered, the correction held the field
+#   capacity through the flush to 4.9 points on average (none 12.3, linear 6.8).
+#
+# The correction is subtractive because a multiplicative one cancels against
+# the normalisation, which divides by a percentile of the same series.
+EC_COMPENSATION_REFERENCE = 180.0  # uS/cm
+DEFAULT_EC_COMPENSATION = 0.0  # off; 19.7 measured for Xiaomi/MiFlora in coco
 
-# Pore water EC. Bulk EC mixes water content and salt content, because dry pores
-# do not conduct. Dividing by the water term leaves the concentration in the
-# pore water. The exponent is medium dependent; Archie/Rhoades suggest 1.3-2.0
-# for substrates, but it cannot be derived from the probe data alone.
+# Pore water EC. The probe reads the EC of the pot as a whole -- water, coco and
+# air -- and that reading falls as the pot dries although no salt leaves.
+#
+#     EC_pore = PORE_WATER_SCALE * EC_probe / (moisture/100) ** exponent
+#
+# Determined on the same probes:
+# - Exponent: over 176 drying cycles the probe EC followed the moisture with an
+#   ln-ln slope of 2.1 (nights 2.2, R2 per cycle 0.86-0.96). With it the pore
+#   value stays flat through a cycle, unless the plant concentrates or depletes
+#   the solution while drinking -- which is what the value is there to show.
+# - Scale: after three days of flushing with 1640 uS/cm, three probes in
+#   different pots agreed within 3 % at about 600 right after watering.
+# - The moisture divided by is the normalised reading without the EC
+#   correction: normalising leaves the wet/dry ratio alone, the correction
+#   shifts it.
 ATTR_CONDUCTIVITY_MODE = "conductivity_mode"
 CONDUCTIVITY_MODE_BULK = "bulk"
 CONDUCTIVITY_MODE_PORE_WATER = "pore_water"
 DEFAULT_CONDUCTIVITY_MODE = CONDUCTIVITY_MODE_BULK
-DEFAULT_PORE_EXPONENT = 1.0
-MIN_MOISTURE_FOR_PORE_EC = 15.0  # below this the division is meaningless
+DEFAULT_PORE_EXPONENT = 2.0
+PORE_WATER_SCALE = 2.7
+MIN_MOISTURE_FOR_PORE_EC = 50.0  # with exponent 2, 15 % would multiply by 44
 
 SERVICE_REPLACE_SENSOR = "replace_sensor"
 SERVICE_REMOVE_PLANT = "remove_plant"
