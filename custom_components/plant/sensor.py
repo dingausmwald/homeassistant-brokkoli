@@ -886,7 +886,8 @@ class PlantCurrentMoisture(PlantCurrentStatus):
         elif ec is None:
             correction = None
         else:
-            correction = round(-factor * math.log(ec / EC_COMPENSATION_REFERENCE), 1)
+            term = self._ec_term(ec)
+            correction = -round(factor * term, 1) if term else 0.0
         attributes.update({
             "moisture_ec_compensation": {
                 "coefficient": factor,
@@ -1050,6 +1051,11 @@ class PlantCurrentMoisture(PlantCurrentStatus):
         sensor = getattr(self._plant, "sensor_conductivity", None)
         return bool(sensor is not None and getattr(sensor, "external_sensor", None))
 
+    @staticmethod
+    def _ec_term(ec: float) -> float:
+        """ln(EC / reference), and 0 below the reference."""
+        return max(0.0, math.log(ec / EC_COMPENSATION_REFERENCE))
+
     def _ec_compensated(self, value, ec):
         """The reading without the part the EC contributes, or None.
 
@@ -1065,7 +1071,10 @@ class PlantCurrentMoisture(PlantCurrentStatus):
         the uncorrected reading, which would jump by the whole correction.
 
         Logarithmic in the probe EC, relative to the lowest EC the effect was
-        measured at; const.py records how it was determined.
+        measured at; const.py records how it was determined. Below that EC
+        nothing is corrected: there is no data there, and the logarithm would
+        add moisture without limit -- at 70 uS/cm it added 18 points to a
+        plant and showed a pot at 95 % whose raw reading had fallen to 36.
 
         Unclamped: the caller clamps after normalising, and the maximum is
         taken over unclamped values, so both sides of the division match.
@@ -1078,7 +1087,7 @@ class PlantCurrentMoisture(PlantCurrentStatus):
             return numeric
         if ec is None:
             return None
-        return numeric - self._ec_factor() * math.log(ec / EC_COMPENSATION_REFERENCE)
+        return numeric - self._ec_factor() * self._ec_term(ec)
 
     def _corrected_history(self, moisture_states, ec_states) -> list[float]:
         """The window's readings on the scale the published value is computed on.
