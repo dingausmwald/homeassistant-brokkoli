@@ -41,7 +41,7 @@ from homeassistant.const import (
     UnitOfTime,
     Platform,
 )
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import (
     Entity,
@@ -385,6 +385,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 class PlantCurrentStatus(RestoreSensor):
     """Base device for plants"""
 
+    _unsub_external_sensor: CALLBACK_TYPE | None = None
+
     def __init__(
         self, hass: HomeAssistant, config: ConfigEntry, plantdevice: Entity
     ) -> None:
@@ -433,8 +435,15 @@ class PlantCurrentStatus(RestoreSensor):
         """Modify the external sensor"""
         _LOGGER.info("Setting %s external sensor to %s", self.entity_id, new_sensor)
         self._external_sensor = new_sensor
+        # Den Listener der bisherigen Quelle abmelden. Ohne das lief er bis zum
+        # naechsten Neustart weiter und schrieb bei jeder Meldung der alten
+        # Quelle deren Wert in diese Entity -- die Pflanze wertete dann
+        # abwechselnd alte und neue Quelle aus.
+        if self._unsub_external_sensor is not None:
+            self._unsub_external_sensor()
+            self._unsub_external_sensor = None
         if self._external_sensor:
-            async_track_state_change_event(
+            self._unsub_external_sensor = async_track_state_change_event(
                 self._hass,
                 [self._external_sensor],
                 self._state_changed_event,
@@ -475,6 +484,13 @@ class PlantCurrentStatus(RestoreSensor):
         async_dispatcher_connect(
             self._hass, DATA_UPDATED, self._schedule_immediate_update
         )
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Den Listener auf die externe Quelle mit der Entity abmelden."""
+        await super().async_will_remove_from_hass()
+        if self._unsub_external_sensor is not None:
+            self._unsub_external_sensor()
+            self._unsub_external_sensor = None
 
     @callback
     def _schedule_immediate_update(self):
@@ -2464,6 +2480,7 @@ class PlantCurrentPowerConsumption(RestoreSensor):
 class PlantTotalPowerConsumption(RestoreSensor):
     """Entity class to calculate total power consumption without 24h window"""
 
+    _unsub_external_sensor: CALLBACK_TYPE | None = None
 
     _attr_has_entity_name = True
     _attr_translation_key = "total_power_consumption"
@@ -2518,13 +2535,8 @@ class PlantTotalPowerConsumption(RestoreSensor):
         """Modify the external sensor"""
         _LOGGER.info("Setting %s external sensor to %s", self.entity_id, new_sensor)
         self._external_sensor = new_sensor
-        if self._external_sensor:
-            async_track_state_change_event(
-                self._hass,
-                [self._external_sensor],
-                self._state_changed_event,
-            )
-        else:
+        self._track_external_sensor()
+        if not self._external_sensor:
             self._attr_native_value = 0
         # Beim Setup weist die Plattform den externen Sensor zu, bevor
         # async_add_entities die Entity fertig hinzugefuegt hat -- dann ist hass
@@ -2549,8 +2561,27 @@ class PlantTotalPowerConsumption(RestoreSensor):
             except (TypeError, ValueError):
                 self._attr_native_value = 0
 
+        self._track_external_sensor()
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Den Listener auf die externe Quelle mit der Entity abmelden."""
+        await super().async_will_remove_from_hass()
+        if self._unsub_external_sensor is not None:
+            self._unsub_external_sensor()
+            self._unsub_external_sensor = None
+
+    def _track_external_sensor(self) -> None:
+        """Genau einen Listener auf die aktuelle Quelle halten.
+
+        Der alte wird vorher abgemeldet: sonst zaehlte nach einem Sensortausch
+        die alte Quelle weiter mit, und weil die Plattform die Quelle schon vor
+        async_added_to_hass zuweist, lief nach jedem Start jede Meldung doppelt ein.
+        """
+        if self._unsub_external_sensor is not None:
+            self._unsub_external_sensor()
+            self._unsub_external_sensor = None
         if self._external_sensor:
-            async_track_state_change_event(
+            self._unsub_external_sensor = async_track_state_change_event(
                 self._hass,
                 [self._external_sensor],
                 self._state_changed_event,
