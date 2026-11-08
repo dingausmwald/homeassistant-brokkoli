@@ -500,7 +500,17 @@ class PlantCurrentStatus(RestoreSensor):
 
     @callback
     def _state_changed_event(self, event):
-        """Sensor state change event."""
+        """Sensor state change event.
+
+        replace_external_sensor subscribes during platform setup, before
+        async_add_entities has finished adding the entity, so an event can
+        arrive while hass is still None -- reliably with the room temperature
+        and humidity sensors, which several plants share and which report
+        often. Dropping it costs nothing: async_added_to_hass reads the
+        source's current state anyway.
+        """
+        if self.hass is None:
+            return
         self.state_changed(event.data.get("entity_id"), event.data.get("new_state"))
 
     @callback
