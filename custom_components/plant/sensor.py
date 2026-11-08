@@ -9,7 +9,7 @@ import inspect
 import logging
 import math
 import random
-from statistics import median_low, quantiles
+from statistics import median, median_low, quantiles
 from typing import Any
 
 from homeassistant.components.integration.const import METHOD_TRAPEZOIDAL
@@ -65,6 +65,7 @@ from .const import (
     DEFAULT_LUX_TO_PPFD,
     DEFAULT_EC_COMPENSATION,
     EC_COMPENSATION_REFERENCE,
+    EC_REFERENCE_BAND,
     ATTR_CONDUCTIVITY_MODE,
     CONDUCTIVITY_MODE_BULK,
     CONDUCTIVITY_MODE_PORE_WATER,
@@ -773,11 +774,11 @@ class PlantCurrentMoisture(PlantCurrentStatus):
         self._normalize_percentile = config.data[FLOW_PLANT_INFO].get(
             ATTR_NORMALIZE_PERCENTILE, DEFAULT_NORMALIZE_PERCENTILE
         )
-        self._max_moisture = None
-        self._max_moisture_raw = None  # same percentile without EC correction
+        self._max_moisture_raw = None  # percentile of the raw readings
+        self._reference_ec = None  # EC of the comparison state, see const.py
         self._last_normalize_update = None
 
-        self._smooth_buffer = []  # (timestamp, reading, EC at that reading)
+        self._smooth_buffer = []  # (timestamp, reading)
         self._smoothed_value = None
         self._last_sample_ts = None
         self._rescaling = False
@@ -787,18 +788,22 @@ class PlantCurrentMoisture(PlantCurrentStatus):
         await super().async_added_to_hass()
         
         # Initialisiere Normalisierung beim Start
-        if self._normalize:
+        if self._normalize or self._ec_active():
             self._last_normalize_update = None  # Force update
             await self._update_normalization()
-            
+
             # Wenn es eine Neuerstellung ist, aktualisiere sofort
             if self._config.data[FLOW_PLANT_INFO].get(ATTR_IS_NEW_PLANT, False):
                 _LOGGER.debug("New plant created, updating normalization immediately")
                 await self._update_normalization()
 
     async def _update_normalization(self) -> None:
-        """Update the normalization max value"""
-        if not self._normalize or not self._external_sensor:
+        """Refresh the window statistics: the maximum and the EC reference.
+
+        Also runs with normalisation off, because the EC correction needs the
+        same window to find its comparison state.
+        """
+        if not self._external_sensor or not (self._normalize or self._ec_active()):
             return
 
         now = dt_util.utcnow()
@@ -824,13 +829,23 @@ class PlantCurrentMoisture(PlantCurrentStatus):
         if not history_list or self._external_sensor not in history_list:
             return
 
-        # The maximum has to come from the series the current reading is
-        # divided into. With the EC correction on, that is the corrected one:
-        # dividing a corrected reading by the maximum of the raw readings put a
-        # saturated pot well below 100 % the moment a factor was set, and the
-        # value crept back as the window filled with readings at the new EC.
-        ec_states = None
-        if self._ec_active():
+        moisture_states = [
+            s for s in history_list[self._external_sensor]
+            if s.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE)
+        ]
+        raw_values = []
+        for state in moisture_states:
+            try:
+                raw_values.append(float(state.state))
+            except (TypeError, ValueError):
+                continue
+        raw_max = self._percentile(raw_values)
+        self._max_moisture_raw = raw_max if raw_max and raw_max > 0 else None
+
+        # EC of the comparison state: the pot full and drained, which is the
+        # state the factor was measured in. const.py records why the
+        # instantaneous EC must not be used here.
+        if self._ec_active() and self._max_moisture_raw:
             ec_sensor = self._plant.sensor_conductivity.external_sensor
             ec_history = await recorder.async_add_executor_job(
                 history.state_changes_during_period,
@@ -839,36 +854,20 @@ class PlantCurrentMoisture(PlantCurrentStatus):
                 now,
                 ec_sensor,
             )
-            ec_states = (ec_history or {}).get(ec_sensor, [])
-
-        values = self._corrected_history(history_list[self._external_sensor], ec_states)
-
-        # The pore water EC divides by the moisture without the correction, so
-        # the maximum of the uncorrected readings is kept as well.
-        raw_values = []
-        for state in history_list[self._external_sensor]:
-            try:
-                raw_values.append(float(state.state))
-            except (TypeError, ValueError):
-                continue
-        raw_max = self._percentile(raw_values)
-        self._max_moisture_raw = raw_max if raw_max and raw_max > 0 else None
-
-        if values:
-            maximum = self._percentile(values)
-            if maximum <= 0:
-                self._max_moisture = None
-                self._last_normalize_update = now
-                return
-            self._max_moisture = maximum
-            self._normalize_factor = 100 / self._max_moisture  # Exakter Wert für Berechnungen
-            self._last_normalize_update = now
-            _LOGGER.debug(
-                "Updated moisture normalization: max=%s, factor=%s (from %s values)",
-                self._max_moisture,
-                round(self._normalize_factor, 2),  # Gerundeter Wert nur für Log
-                len(values)
+            self._reference_ec = self._comparison_state_ec(
+                moisture_states, (ec_history or {}).get(ec_sensor, [])
             )
+
+        self._last_normalize_update = now
+        if self._max_moisture:
+            self._normalize_factor = 100 / self._max_moisture  # Exakter Wert für Berechnungen
+        _LOGGER.debug(
+            "Updated moisture window: raw max=%s, corrected max=%s, reference EC=%s (from %s values)",
+            self._max_moisture_raw,
+            self._max_moisture,
+            self._reference_ec,
+            len(raw_values),
+        )
 
     @property
     def extra_state_attributes(self) -> dict:
@@ -895,21 +894,13 @@ class PlantCurrentMoisture(PlantCurrentStatus):
             }
         })
 
-        factor = self._ec_factor()
-        ec = self._current_ec()
-        if not self._ec_active():
-            correction = 0
-        elif ec is None:
-            correction = None
-        else:
-            term = self._ec_term(ec)
-            correction = -round(factor * term, 1) if term else 0.0
         attributes.update({
             "moisture_ec_compensation": {
-                "coefficient": factor,
-                "ec_raw": ec,
+                "coefficient": self._ec_factor(),
+                "ec_comparison_state": self._reference_ec if self._ec_active() else None,
+                "ec_raw": self._current_ec(),
                 "reference": EC_COMPENSATION_REFERENCE,
-                "correction": correction,
+                "correction": -round(self._ec_correction(), 1),
             }
         })
 
@@ -922,6 +913,20 @@ class PlantCurrentMoisture(PlantCurrentStatus):
         ordered = sorted(values)
         index = min(len(ordered) - 1, int(len(ordered) * self._normalize_percentile / 100))
         return ordered[index]
+
+    @property
+    def _max_moisture(self):
+        """The maximum the published value is divided by.
+
+        The raw percentile minus the correction, because the current reading has
+        the correction subtracted too. Both shift together, so a saturated pot
+        stays at 100 % however the salinity moves -- which is the whole point of
+        correcting at all.
+        """
+        if not self._max_moisture_raw:
+            return None
+        maximum = self._max_moisture_raw - self._ec_correction()
+        return maximum if maximum > 0 else None
 
     @property
     def pore_water_moisture(self):
@@ -967,11 +972,7 @@ class PlantCurrentMoisture(PlantCurrentStatus):
         if timestamp is not None and timestamp == self._last_sample_ts:
             return
         self._last_sample_ts = timestamp
-        # The EC is kept with the reading: the correction has to use the EC
-        # current when this reading was taken, not when the median is taken.
-        self._smooth_buffer.append(
-            (timestamp or dt_util.utcnow(), numeric, self._current_ec())
-        )
+        self._smooth_buffer.append((timestamp or dt_util.utcnow(), numeric))
         self._prune_smooth_buffer()
 
     def _apply_smoothing(self) -> None:
@@ -1004,26 +1005,21 @@ class PlantCurrentMoisture(PlantCurrentStatus):
         raw value, and only the consumption sensor reads the smoothed one --
         the delay costs it nothing, because a delayed signal covers the same
         total distance.
+
+        The EC correction is a constant offset over the window, so it can be
+        applied to the median rather than to every reading -- unlike with the
+        instantaneous EC, where that order put the EC's own jitter back into the
+        series the median had just cleaned.
         """
         if self._raw_value is None:
             self._smoothed_value = None
             return
         self._prune_smooth_buffer()
-        # Corrected reading by reading, then the median. Subtracting the current
-        # EC from the median afterwards put the EC's own jitter back into the
-        # series the median had just cleaned, and the consumption sensor counts
-        # every step of it.
-        values = [
-            corrected
-            for _, value, ec in self._smooth_buffer
-            if (corrected := self._ec_compensated(value, ec)) is not None
-        ]
+        values = [v for _, v in self._smooth_buffer]
         if len(values) < MIN_SMOOTH_SAMPLES:
-            self._smoothed_value = self._ec_compensated(
-                self._raw_value, self._current_ec()
-            )
+            self._smoothed_value = self._ec_compensated(self._raw_value)
             return
-        self._smoothed_value = median_low(values)
+        self._smoothed_value = self._ec_compensated(median_low(values))
 
     def _ec_factor(self) -> float:
         """Moisture points per e-fold of the probe EC (the plant's factor entity)."""
@@ -1072,68 +1068,81 @@ class PlantCurrentMoisture(PlantCurrentStatus):
         """ln(EC / reference), and 0 below the reference."""
         return max(0.0, math.log(ec / EC_COMPENSATION_REFERENCE))
 
-    def _ec_compensated(self, value, ec):
-        """The reading without the part the EC contributes, or None.
+    def _ec_correction(self) -> float:
+        """Moisture points the salinity adds to the reading, 0 if not applicable.
+
+        Logarithmic in the EC of the comparison state, relative to the lowest EC
+        the effect was measured at; const.py records how both were determined.
+
+        Below the reference nothing is corrected: there is no data there, and
+        the logarithm would add moisture without limit -- at 70 uS/cm it added
+        18 points and showed a pot at 95 % whose raw reading had fallen to 36.
+
+        Zero while the reference is still unknown, right after a restart or for
+        a plant whose window holds no comparison state yet. An uncorrected
+        reading is a defensible value; one corrected by the instantaneous EC is
+        not.
+        """
+        if not self._ec_active() or not self._reference_ec:
+            return 0.0
+        return self._ec_factor() * self._ec_term(self._reference_ec)
+
+    def _ec_compensated(self, value):
+        """The reading without the part the salinity contributes.
 
         Capacitive probes measure the impedance of the medium; at their low
-        excitation frequency ionic conduction contributes heavily. When the EC
-        in the pot falls, the reading falls without any water missing.
+        excitation frequency ionic conduction contributes heavily. Raise the
+        salinity in the pot and the reading rises without any water arriving.
 
         Subtractive, not multiplicative: a factor would cancel against the
         normalisation, which divides by a percentile of the same series.
 
-        ec is the raw EC current when the reading was taken. When the
-        correction is on but that EC is unknown, None comes back rather than
-        the uncorrected reading, which would jump by the whole correction.
-
-        Logarithmic in the probe EC, relative to the lowest EC the effect was
-        measured at; const.py records how it was determined. Below that EC
-        nothing is corrected: there is no data there, and the logarithm would
-        add moisture without limit -- at 70 uS/cm it added 18 points to a
-        plant and showed a pot at 95 % whose raw reading had fallen to 36.
-
-        Unclamped: the caller clamps after normalising, and the maximum is
-        taken over unclamped values, so both sides of the division match.
+        Unclamped: the caller clamps after normalising, and the maximum carries
+        the same offset, so both sides of the division match.
         """
         try:
             numeric = float(value)
         except (TypeError, ValueError):
             return None
-        if not self._ec_active():
-            return numeric
-        if ec is None:
-            return None
-        return numeric - self._ec_factor() * self._ec_term(ec)
+        return numeric - self._ec_correction()
 
-    def _corrected_history(self, moisture_states, ec_states) -> list[float]:
-        """The window's readings on the scale the published value is computed on.
+    def _comparison_state_ec(self, moisture_states, ec_states):
+        """EC of the state the factor was measured in: the pot full and drained.
 
-        Each reading is paired with the last EC state at or before it -- the
-        same pairing the live value gets from the conductivity sensor. Readings
-        without a known EC are left out rather than mixed in uncorrected.
+        Takes the readings whose raw moisture sits in the band below the window
+        percentile and returns the median EC at those moments. Runoff spikes
+        while fresh solution flows past the probe lie above the percentile and
+        drop out; the drying phase lies below the band and drops out.
+
+        None when the window holds no such moment, which leaves the correction
+        at zero rather than guessing.
         """
         ec_series = []
         for state in ec_states or []:
             try:
                 ec = float(state.state)
             except (TypeError, ValueError):
-                ec = None
-            ec_series.append((state.last_updated, ec if ec is not None and ec > 0 else None))
+                continue
+            if ec > 0:
+                ec_series.append((state.last_updated, ec))
+        if not ec_series:
+            return None
         ec_series.sort(key=lambda item: item[0])
         ec_times = [t for t, _ in ec_series]
 
+        floor = EC_REFERENCE_BAND * self._max_moisture_raw
         values = []
         for state in moisture_states:
-            if state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
+            try:
+                moisture = float(state.state)
+            except (TypeError, ValueError):
                 continue
-            ec = None
+            if not floor <= moisture <= self._max_moisture_raw:
+                continue
             index = bisect_right(ec_times, state.last_updated) - 1
             if index >= 0:
-                ec = ec_series[index][1]
-            value = self._ec_compensated(state.state, ec)
-            if value is not None:
-                values.append(value)
-        return values
+                values.append(ec_series[index][1])
+        return median(values) if values else None
 
     def _apply_normalization(self) -> None:
         """Setzt den veroeffentlichten Wert aus dem Rohwert.
@@ -1157,7 +1166,7 @@ class PlantCurrentMoisture(PlantCurrentStatus):
             # Nothing to compute: keep the reading exactly as the source sent it.
             self._attr_native_value = self._raw_value
             return
-        value = self._ec_compensated(self._raw_value, self._current_ec())
+        value = self._ec_compensated(self._raw_value)
         if value is None:
             self._attr_native_value = None
             return
@@ -1185,7 +1194,7 @@ class PlantCurrentMoisture(PlantCurrentStatus):
             value = float(self._smoothed_value)
         except (TypeError, ValueError):
             return None
-        # Already corrected for the EC, reading by reading.
+        # Already carries the EC correction from _apply_smoothing.
         if self._normalize:
             if not self._max_moisture:
                 return None
@@ -1244,8 +1253,8 @@ class PlantCurrentMoisture(PlantCurrentStatus):
     async def async_rescale(self) -> None:
         """Recompute after the EC factor changed, without counting it as consumption.
 
-        The maximum is taken over the corrected series, so a new factor needs a
-        new maximum now rather than within five minutes. Readings written while
+        A plant whose factor was zero has no EC reference yet, so the window has
+        to be read now rather than within five minutes. Readings written while
         the recorder is queried are on neither scale; the consumption sensor
         skips them while _rescaling is set, and its window is shifted onto the
         new scale afterwards.

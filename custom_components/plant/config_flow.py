@@ -1171,7 +1171,9 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                             self.plant.sensor_moisture._normalize = new_normalize
                             self.plant.sensor_moisture._normalize_window = new_window
                             self.plant.sensor_moisture._normalize_percentile = new_percentile
-                            self.plant.sensor_moisture._max_moisture = None
+                            # Window statistics belong to the old percentile.
+                            self.plant.sensor_moisture._max_moisture_raw = None
+                            self.plant.sensor_moisture._reference_ec = None
                             self.plant.sensor_moisture._last_normalize_update = None
                             await self.plant.sensor_moisture.async_update()
 

@@ -188,26 +188,47 @@ DEFAULT_LUX_TO_PPFD = 0.0185
 # channel partly measures the EC. Lower the EC in the pot and the reading falls
 # although the pot is just as wet.
 #
-#     moisture = raw - factor * ln(EC / EC_COMPENSATION_REFERENCE)
+#     moisture = raw - factor * ln(EC_comparison / EC_COMPENSATION_REFERENCE)
 #
-# Determined on 8 Xiaomi/MiFlora probes in coco from the drained field capacity
-# after each irrigation, 28.08.-10.09.2026: 570 events, including a lowered
-# nutrient EC and a three-day flush that halved the EC in the pots.
-# - The reading follows the probe's own EC, not the EC of the feed (R2 within a
-#   day 0.72 against 0.05).
-# - With one factor for all probes the relation is logarithmic: EC^q fits best
-#   at q 0.1-0.3, linear clearly worse (R2 0.62 against 0.72). A doubling of the
-#   probe EC adds about 13.7 points, a factor of 19.7.
-# - There is no threshold below which the EC stops acting, down to the lowest
-#   EC measured, 180 uS/cm. A logarithm has no zero point, so the reference is
-#   that lowest measured EC: all of the effect the data show is removed, and
-#   nothing below it is extrapolated.
-# - Fitted on the days before the EC was lowered, the correction held the field
-#   capacity through the flush to 4.9 points on average (none 12.3, linear 6.8).
+# WHICH EC goes into that formula matters as much as the factor, and it must be
+# the EC of the state the factor was measured in -- the pot full and drained --
+# never the instantaneous reading. Bulk EC falls as a pot dries because dry
+# pores do not conduct, so feeding the momentary value into a formula meant for
+# salinity subtracts the drying itself. Measured over a dozen cycles: with the
+# instantaneous EC only 16 % of the drying reached the published value (single
+# cycles from 35 % down to -20 %, where the reading rose while the pot dried),
+# against 97 % with the comparison state below.
+#
+# The comparison state is found the way the normalisation maximum is: the
+# readings whose raw moisture sits in the band [EC_REFERENCE_BAND * p, p] of the
+# window percentile. Runoff spikes while fresh solution flows past the probe lie
+# above p and drop out; the drying phase lies below the band and drops out. It
+# is a state the pot returns to after every irrigation, not a guess at how long
+# draining takes.
+#
+# Determined that way on 8 Xiaomi/MiFlora probes in coco over 26.08.-14.09.2026,
+# which contained a feed change (2.03 -> 1.56 mS/cm) and a three-day flush:
+# - Factor 21.3 pooled (R2 0.80, 110 probe-days); per probe 19.5, 20.5, 25.0,
+#   25.1 for the four with enough days clear of the ceiling. 19.7 is kept: the
+#   difference is well inside the spread between probes.
+# - The relation is logarithmic; linear fits clearly worse.
+# - Within a drying cycle the same regression gives 34.2 -- a different number,
+#   which is what shows the two effects are separable and the cross-sensitivity
+#   is real rather than the coupling of bulk EC to water content.
+# - No threshold below which the EC stops acting, down to the lowest EC
+#   measured, 180 uS/cm. A logarithm has no zero point, so the reference is that
+#   lowest measured EC: everything the data show is removed, nothing below it is
+#   extrapolated.
+# - A probe sitting at its 100 % ceiling cannot be calibrated at all; those
+#   probe-days carry no comparison state.
 #
 # The correction is subtractive because a multiplicative one cancels against
-# the normalisation, which divides by a percentile of the same series.
+# the normalisation, which divides by a percentile of the same series. Being a
+# constant offset over the window, it cancels exactly at saturation: numerator
+# and denominator shift together, so a full pot stays at 100 % however the
+# salinity moves.
 EC_COMPENSATION_REFERENCE = 180.0  # uS/cm
+EC_REFERENCE_BAND = 0.97  # how far below the percentile the comparison band reaches
 DEFAULT_EC_COMPENSATION = 0.0  # off; 19.7 measured for Xiaomi/MiFlora in coco
 
 # Pore water EC. The probe reads the EC of the pot as a whole -- water, coco and

@@ -27,38 +27,63 @@ A Home Assistant integration for monitoring cannabis plants with sensors and con
 
 Cheap capacitive probes measure the impedance of the medium. At their low
 excitation frequency ionic conduction contributes heavily, so the moisture
-channel partly measures the EC: flush a pot or lower the EC of the nutrient
-solution and the moisture reading drops although the pot is just as wet.
+channel partly measures the salinity: raise the EC in the pot and the moisture
+reading rises although no water arrived.
 
-The integration takes the probe's own EC out of the moisture reading:
+The integration takes that part out of the reading:
 
 ```
-moisture = raw − factor × ln(EC / 180 µS/cm)
+moisture = raw − factor × ln(EC_comparison / 180 µS/cm)
 ```
 
 Each plant has an **EC compensation factor** (a `number` entity); new plants
 start from the default in the integration configuration. `0` disables it. For
 Xiaomi/MiFlora probes in coco use **19.7** — the same value for every plant.
-With normalisation on, the maximum is taken over the corrected readings, so a
-saturated pot still reads 100 %.
+
+**`EC_comparison` is not the current EC reading.** It is the EC of the state the
+factor was measured in: the pot full and drained. The integration finds it the
+same way it finds the normalisation maximum — the readings whose raw moisture
+sits just below the window percentile. Runoff spikes while fresh solution flows
+past the probe lie above the percentile and drop out; the drying phase lies
+below the band and drops out.
+
+That distinction matters more than the factor itself. Bulk EC falls as a pot
+dries, because dry pores do not conduct. Feeding the momentary EC into a
+formula meant for salinity therefore subtracts the drying itself: measured over
+a dozen cycles, only **16 %** of the drying reached the published value — in
+single cycles between 35 % and −20 %, where the reading rose while the pot
+dried. With the comparison state it is **97 %**.
+
+Because the correction is one constant offset over the window, it cancels
+exactly at saturation: numerator and denominator shift together, so a full pot
+stays at 100 % however the salinity moves. Until the window holds a comparison
+state — right after a restart, or for a newly placed probe — no correction is
+applied rather than a guessed one.
 
 **Where the numbers come from.** Eight Xiaomi/MiFlora (HHCCJCY01) probes in
-coco, evaluated per irrigation event over two weeks that included lowering the
-nutrient EC and a three-day flush that halved the EC in the pots:
+coco over three weeks that included a feed change (2.03 → 1.56 mS/cm) and a
+three-day flush, evaluated at the comparison state above:
 
-- The reading follows the EC the probe itself measures, not the EC of the feed.
-- With one factor for all probes the relation is logarithmic, not linear: each
-  doubling of the probe EC adds about 13.7 moisture points.
+- Factor **21.3** pooled (R² 0.80, 110 probe-days); per probe 19.5, 20.5, 25.0
+  and 25.1 for the four with enough days clear of the ceiling. 19.7 is kept —
+  the difference is well inside the spread between probes.
+- The relation is logarithmic; linear fits clearly worse.
+- Within a drying cycle the same regression gives **34.2** — a different number,
+  and that difference is what shows the cross-sensitivity is real rather than
+  just bulk EC following the water content.
 - The effect shows down to the lowest EC measured, 180 µS/cm, without a
   threshold. A logarithm has no zero point, so the reference is that lowest
   measured EC: everything the data show is removed, nothing below it is
   extrapolated. With normalisation the reference only moves the driest values.
-- Fitted on the days before the EC change, the correction held the field
-  capacity through the flush to within 4.9 points on average (uncorrected 12.3,
-  linear 6.8).
 
-A probe that sits at its 100 % ceiling in a wet pot cannot be corrected — the
-reading is cut off. Position probes so they read below about 95 when saturated.
+A probe that sits at its 100 % ceiling in a wet pot cannot be corrected or
+calibrated at all — the reading is cut off and the pot never shows a comparison
+state. Position probes so they read below about 95 when saturated.
+
+Note that the probe's placement dominates everything else here: pulling one
+probe and pushing it back into the same pot moved its EC reading by up to 54 %
+and its raw moisture by 19 points. Per-plant factors are therefore not worth
+chasing — they would be stale after the next repot.
 
 ### Pore water EC (optional)
 
