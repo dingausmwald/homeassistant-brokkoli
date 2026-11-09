@@ -37,8 +37,10 @@ from .const import (
     DEFAULT_CONDUCTIVITY_MODE,
     CONF_DEFAULT_EC_COMPENSATION,
     CONF_DEFAULT_PORE_EXPONENT,
+    CONF_DEFAULT_LUX_TO_PPFD,
     DEFAULT_EC_COMPENSATION,
     DEFAULT_PORE_EXPONENT,
+    DEFAULT_LUX_TO_PPFD,
     AGGREGATION_MEDIAN,
     AGGREGATION_MEAN,
     AGGREGATION_MIN,
@@ -276,6 +278,7 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     "default_normalize_percentile": DEFAULT_NORMALIZE_PERCENTILE,
                     CONF_DEFAULT_EC_COMPENSATION: DEFAULT_EC_COMPENSATION,
                     CONF_DEFAULT_PORE_EXPONENT: DEFAULT_PORE_EXPONENT,
+                    CONF_DEFAULT_LUX_TO_PPFD: DEFAULT_LUX_TO_PPFD,
 
                     # Default Aggregationsmethoden für Cycle
                     "default_growth_phase_aggregation": "min",
@@ -1026,6 +1029,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     "default_normalize_percentile": "default_normalize_percentile",
                     CONF_DEFAULT_EC_COMPENSATION: CONF_DEFAULT_EC_COMPENSATION,
                     CONF_DEFAULT_PORE_EXPONENT: CONF_DEFAULT_PORE_EXPONENT,
+                    CONF_DEFAULT_LUX_TO_PPFD: CONF_DEFAULT_LUX_TO_PPFD,
                     CONF_DEFAULT_MAX_MOISTURE: CONF_DEFAULT_MAX_MOISTURE,
                     CONF_DEFAULT_MIN_MOISTURE: CONF_DEFAULT_MIN_MOISTURE,
                     CONF_DEFAULT_MAX_ILLUMINANCE: CONF_DEFAULT_MAX_ILLUMINANCE,
@@ -1353,6 +1357,10 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Optional(
                     CONF_DEFAULT_PORE_EXPONENT,
                     default=self.entry.data[FLOW_PLANT_INFO].get(CONF_DEFAULT_PORE_EXPONENT, DEFAULT_PORE_EXPONENT)
+                ): vol.Coerce(float),
+                vol.Optional(
+                    CONF_DEFAULT_LUX_TO_PPFD,
+                    default=self.entry.data[FLOW_PLANT_INFO].get(CONF_DEFAULT_LUX_TO_PPFD, DEFAULT_LUX_TO_PPFD)
                 ): vol.Coerce(float),
                 vol.Optional(
                     "default_cycle_icon",

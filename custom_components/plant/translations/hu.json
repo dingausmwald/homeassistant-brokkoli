@@ -120,7 +120,8 @@
           "temperature_trigger": "Hőmérséklet használata probléma kiváltóként",
           "conductivity_mode": "Conductivity reading",
           "default_ec_compensation": "Default EC compensation factor",
-          "default_pore_exponent": "Default pore water EC exponent"
+          "default_pore_exponent": "Default pore water EC exponent",
+          "default_lux_to_ppfd": "Default lux to PPFD factor"
         }
       }
     }

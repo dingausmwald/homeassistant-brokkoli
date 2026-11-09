@@ -504,6 +504,7 @@ CONF_DEFAULT_MAX_PH = "default_max_ph"  # Neue Konstanten für pH
 CONF_DEFAULT_MIN_PH = "default_min_ph"
 CONF_DEFAULT_EC_COMPENSATION = "default_ec_compensation"
 CONF_DEFAULT_PORE_EXPONENT = "default_pore_exponent"
+CONF_DEFAULT_LUX_TO_PPFD = "default_lux_to_ppfd"
 
 # Defaults for the problem triggers, configurable on the configuration node
 CONF_DEFAULT_ILLUMINANCE_TRIGGER = "default_illuminance_trigger"

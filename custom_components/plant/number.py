@@ -44,6 +44,7 @@ from .const import (
     CONF_DEFAULT_EC_COMPENSATION,
     DEFAULT_PORE_EXPONENT,
     CONF_DEFAULT_PORE_EXPONENT,
+    CONF_DEFAULT_LUX_TO_PPFD,
 )
 
 from .plant_thresholds import (
@@ -812,50 +813,6 @@ class PlantHealthNumber(RestoreNumber):
                         break
 
 
-class PlantLuxToPpfd(NumberEntity, RestoreEntity):
-    """Number to configure the Lux to PPFD conversion factor."""
-
-    _attr_has_entity_name = True
-    _attr_translation_key = "lux_to_ppfd"
-
-    def __init__(self, hass: HomeAssistant, config: ConfigEntry, plant_device) -> None:
-        """Initialize the lux to PPFD conversion factor number."""
-        self._hass = hass
-        self._config = config
-        self._plant = plant_device
-        self._attr_unique_id = f"{config.entry_id}_lux_to_ppfd"
-        self._attr_native_min_value = 0
-        self._attr_native_max_value = 1
-        self._attr_native_step = 0.0001
-        self._attr_icon = "mdi:white-balance-sunny"
-        self._attr_entity_category = EntityCategory.CONFIG
-        self._attr_mode = NumberMode.BOX
-        self._attr_native_value = DEFAULT_LUX_TO_PPFD
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        """Return device info."""
-        return DeviceInfo(identifiers={(DOMAIN, self._plant.unique_id)})
-
-    async def async_set_native_value(self, value: float) -> None:
-        """Update the current value."""
-        self._attr_native_value = value
-        self.async_write_ha_state()
-
-    async def async_added_to_hass(self) -> None:
-        """Handle entity which will be added."""
-        await super().async_added_to_hass()
-
-        if not self._config.data[FLOW_PLANT_INFO].get(ATTR_IS_NEW_PLANT, False):
-            # Neustart - stelle letzten Zustand wieder her
-            last_state = await self.async_get_last_state()
-            if last_state is not None:
-                try:
-                    self._attr_native_value = float(last_state.state)
-                except (TypeError, ValueError):
-                    self._attr_native_value = DEFAULT_LUX_TO_PPFD
-
-
 class _PlantGlobalDefaultNumber(NumberEntity, RestoreEntity):
     """A per-plant factor that starts from a global default.
 
@@ -919,6 +876,23 @@ class _PlantGlobalDefaultNumber(NumberEntity, RestoreEntity):
                     self._attr_native_value = float(last_state.state)
                 except (TypeError, ValueError):
                     pass
+
+
+class PlantLuxToPpfd(_PlantGlobalDefaultNumber):
+    """Number to configure the Lux to PPFD conversion factor."""
+
+    _attr_translation_key = "lux_to_ppfd"
+
+    default_const = DEFAULT_LUX_TO_PPFD
+    config_key = CONF_DEFAULT_LUX_TO_PPFD
+
+    def __init__(self, hass: HomeAssistant, config: ConfigEntry, plant_device) -> None:
+        self._attr_unique_id = f"{config.entry_id}_lux_to_ppfd"
+        self._attr_native_min_value = 0
+        self._attr_native_max_value = 1
+        self._attr_native_step = 0.0001
+        self._attr_icon = "mdi:white-balance-sunny"
+        super().__init__(hass, config, plant_device)
 
 
 class PlantEcCompensation(_PlantGlobalDefaultNumber):
