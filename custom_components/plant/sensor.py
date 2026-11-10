@@ -143,6 +143,12 @@ def _init_accepts_hass(cls: type) -> bool:
 
 
 _INTEGRATION_SENSOR_ACCEPTS_HASS = _init_accepts_hass(IntegrationSensor)
+# HA 2026.11 made device_class a required keyword of IntegrationSensor. None is
+# what the core passes when no device class is configured: the sensor then
+# derives it from its source, as it did before.
+_INTEGRATION_SENSOR_TAKES_DEVICE_CLASS = (
+    "device_class" in inspect.signature(IntegrationSensor.__init__).parameters
+)
 _STATISTICS_SENSOR_ACCEPTS_HASS = _init_accepts_hass(StatisticsSensor)
 
 
@@ -1456,6 +1462,8 @@ class PlantTotalLightIntegral(IntegrationSensor):
         }
         if _INTEGRATION_SENSOR_ACCEPTS_HASS:
             integration_kwargs["hass"] = hass
+        if _INTEGRATION_SENSOR_TAKES_DEVICE_CLASS:
+            integration_kwargs["device_class"] = None
         super().__init__(**integration_kwargs)
         self._attr_has_entity_name = False
         # The cards look their entities up by translation_key in the entity
