@@ -105,8 +105,11 @@ EC_pore = 2.7 × EC_probe / (moisture/100) ^ exponent
   what the value is there to show. Change it only for a different medium.
 - **Moisture** is the normalised reading without the EC correction. Keep
   normalisation on: the division assumes a saturated pot reads 100 %.
-- Below 50 % moisture nothing is published; with exponent 2 the division would
-  blow the value up.
+- The estimate gets noisier the drier the pot, because the divisor shrinks
+  faster than the probe EC falls, and a single exponent over-corrects at the
+  dry end. It is published anyway; only a moisture of zero leaves nothing to
+  divide by. Earlier versions suppressed everything below 50 % moisture, which
+  blanked the series for hours on a pot that dries deep.
 
 In this mode the conductivity thresholds are in µS/cm of the solution.
 

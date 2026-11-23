@@ -72,7 +72,6 @@ from .const import (
     DEFAULT_CONDUCTIVITY_MODE,
     DEFAULT_PORE_EXPONENT,
     PORE_WATER_SCALE,
-    MIN_MOISTURE_FOR_PORE_EC,
     DOMAIN,
     DOMAIN_SENSOR,
     FLOW_PLANT_INFO,
@@ -666,14 +665,22 @@ class PlantCurrentConductivity(PlantCurrentStatus):
         """The moisture the pore water estimate divides by, or None.
 
         The moisture sensor's normalised reading without the EC correction, see
-        PlantCurrentMoisture.pore_water_moisture. None below the floor, where
-        the division would blow the value up.
+        PlantCurrentMoisture.pore_water_moisture. Only a reading of zero or
+        below is rejected, because there is nothing to divide by; a probe
+        reporting that is unplugged or dead, not dry.
+
+        There used to be a floor at 50 % below which nothing was published. It
+        hid a real limitation instead of fixing it -- the exponent that keeps
+        the estimate flat over a cycle depends on how far the pot dries, so a
+        single exponent over-corrects at the dry end -- and it blanked the
+        series for hours on the one pot that dries deepest. The estimate is
+        noisier down there and the reading is published anyway.
         """
         sensor = getattr(self._plant, "sensor_moisture", None)
         moisture = getattr(sensor, "pore_water_moisture", None) if sensor else None
         if moisture is None:
             return None
-        return moisture if moisture >= MIN_MOISTURE_FOR_PORE_EC else None
+        return moisture if moisture > 0 else None
 
     def _apply_mode(self) -> None:
         """Set the published value from the raw reading.
@@ -689,10 +696,10 @@ class PlantCurrentConductivity(PlantCurrentStatus):
         unavailable, and the previous value would stand in for a measurement
         that no longer exists.
 
-        In pore water mode nothing is published without a usable moisture
-        either. The bulk value is a different quantity -- falling back to it
-        below the moisture floor made the series jump by a factor of six or
-        more between two readings, and the thresholds flapped with it.
+        In pore water mode a moisture of zero or below publishes nothing: the
+        division has no divisor. Falling back to the bulk value is not an
+        option either, as it is a different quantity and made the series jump
+        by a factor of six between two readings.
         """
         if self._raw_value is None:
             self._attr_native_value = None
