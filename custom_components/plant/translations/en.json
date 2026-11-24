@@ -189,7 +189,6 @@
           "default_power_consumption_trigger": "Use power consumption as a problem trigger by default",
           "default_ph_trigger": "Use pH as a problem trigger by default",
           "conductivity_mode": "Conductivity reading",
-          "default_ec_compensation": "Default EC compensation factor",
           "default_pore_exponent": "Default pore water EC exponent",
           "default_lux_to_ppfd": "Default lux to PPFD factor"
         }
@@ -799,9 +798,6 @@
       },
       "min_ph": {
         "name": "Min pH"
-      },
-      "ec_compensation": {
-        "name": "EC compensation factor"
       },
       "pore_exponent": {
         "name": "Pore water EC exponent"

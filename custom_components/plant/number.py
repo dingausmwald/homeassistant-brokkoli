@@ -40,8 +40,6 @@ from .const import (
     HEALTH_STEP,
     HEALTH_DEFAULT,
     CONF_DEFAULT_HEALTH,
-    DEFAULT_EC_COMPENSATION,
-    CONF_DEFAULT_EC_COMPENSATION,
     DEFAULT_PORE_EXPONENT,
     CONF_DEFAULT_PORE_EXPONENT,
     CONF_DEFAULT_LUX_TO_PPFD,
@@ -113,13 +111,6 @@ async def async_setup_entry(
         plant,
     )
 
-    # EC cross-sensitivity of the moisture probe
-    ec_compensation = PlantEcCompensation(
-        hass,
-        entry,
-        plant,
-    )
-
     # Exponent of the pore water EC estimate
     pore_exponent = PlantPoreExponent(
         hass,
@@ -159,7 +150,6 @@ async def async_setup_entry(
         flowering_duration,
         health_number,
         lux_to_ppfd,
-        ec_compensation,
         pore_exponent,
         max_moisture,
         min_moisture,
@@ -191,7 +181,6 @@ async def async_setup_entry(
     plant.add_flowering_duration(flowering_duration)
     plant.add_health_number(health_number)
     plant.add_lux_to_ppfd(lux_to_ppfd)
-    plant.add_ec_compensation(ec_compensation)
     plant.add_pore_exponent(pore_exponent)
     plant.add_thresholds(
         max_moisture=max_moisture,
@@ -893,34 +882,6 @@ class PlantLuxToPpfd(_PlantGlobalDefaultNumber):
         self._attr_native_step = 0.0001
         self._attr_icon = "mdi:white-balance-sunny"
         super().__init__(hass, config, plant_device)
-
-
-class PlantEcCompensation(_PlantGlobalDefaultNumber):
-    """Moisture points removed per e-fold of the probe EC above the reference.
-
-    Capacitive probes read the EC into their moisture channel. 0 disables the
-    correction; 19.7 was measured for Xiaomi/MiFlora probes in coco.
-    """
-
-    _attr_translation_key = "ec_compensation"
-
-    default_const = DEFAULT_EC_COMPENSATION
-    config_key = CONF_DEFAULT_EC_COMPENSATION
-
-    def __init__(self, hass: HomeAssistant, config: ConfigEntry, plant_device) -> None:
-        self._attr_unique_id = f"{config.entry_id}_ec_compensation"
-        self._attr_native_min_value = 0
-        self._attr_native_max_value = 50
-        self._attr_native_step = 0.1
-        self._attr_icon = "mdi:water-percent-alert"
-        super().__init__(hass, config, plant_device)
-
-    async def _notify_sensors(self) -> None:
-        # Moisture first: in pore water mode the conductivity divides by it.
-        for name in ("sensor_moisture", "sensor_conductivity"):
-            sensor = getattr(self._plant, name, None)
-            if sensor is not None and getattr(sensor, "hass", None) is not None:
-                await sensor.async_rescale()
 
 
 class PlantPoreExponent(_PlantGlobalDefaultNumber):

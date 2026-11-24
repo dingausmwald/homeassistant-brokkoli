@@ -189,7 +189,6 @@
           "default_power_consumption_trigger": "Standard: Stromverbrauch als Problemauslöser verwenden",
           "default_ph_trigger": "Standard: pH als Problemauslöser verwenden",
           "conductivity_mode": "Leitfähigkeitswert",
-          "default_ec_compensation": "Standard EC-Korrekturfaktor",
           "default_pore_exponent": "Standard Porenwasser-EC-Exponent",
           "default_lux_to_ppfd": "Standard Lux-zu-PPFD-Faktor"
         }
@@ -799,9 +798,6 @@
       },
       "min_ph": {
         "name": "Min pH"
-      },
-      "ec_compensation": {
-        "name": "EC-Korrekturfaktor"
       },
       "pore_exponent": {
         "name": "Porenwasser-EC-Exponent"

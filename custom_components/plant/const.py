@@ -181,56 +181,6 @@ PPFD_DLI_FACTOR = 0.0036
 # This equals normal sunlight
 DEFAULT_LUX_TO_PPFD = 0.0185
 
-# EC cross-sensitivity of capacitive soil probes.
-#
-# Cheap capacitive probes measure the impedance of the medium, and at their low
-# excitation frequency ionic conduction contributes heavily -- so the moisture
-# channel partly measures the EC. Lower the EC in the pot and the reading falls
-# although the pot is just as wet.
-#
-#     moisture = raw - factor * ln(EC_comparison / EC_COMPENSATION_REFERENCE)
-#
-# WHICH EC goes into that formula matters as much as the factor, and it must be
-# the EC of the state the factor was measured in -- the pot full and drained --
-# never the instantaneous reading. Bulk EC falls as a pot dries because dry
-# pores do not conduct, so feeding the momentary value into a formula meant for
-# salinity subtracts the drying itself. Measured over a dozen cycles: with the
-# instantaneous EC only 16 % of the drying reached the published value (single
-# cycles from 35 % down to -20 %, where the reading rose while the pot dried),
-# against 97 % with the comparison state below.
-#
-# The comparison state is found the way the normalisation maximum is: the
-# readings whose raw moisture sits in the band [EC_REFERENCE_BAND * p, p] of the
-# window percentile. Runoff spikes while fresh solution flows past the probe lie
-# above p and drop out; the drying phase lies below the band and drops out. It
-# is a state the pot returns to after every irrigation, not a guess at how long
-# draining takes.
-#
-# Determined that way on 8 Xiaomi/MiFlora probes in coco over 26.08.-14.09.2026,
-# which contained a feed change (2.03 -> 1.56 mS/cm) and a three-day flush:
-# - Factor 21.3 pooled (R2 0.80, 110 probe-days); per probe 19.5, 20.5, 25.0,
-#   25.1 for the four with enough days clear of the ceiling. 19.7 is kept: the
-#   difference is well inside the spread between probes.
-# - The relation is logarithmic; linear fits clearly worse.
-# - Within a drying cycle the same regression gives 34.2 -- a different number,
-#   which is what shows the two effects are separable and the cross-sensitivity
-#   is real rather than the coupling of bulk EC to water content.
-# - No threshold below which the EC stops acting, down to the lowest EC
-#   measured, 180 uS/cm. A logarithm has no zero point, so the reference is that
-#   lowest measured EC: everything the data show is removed, nothing below it is
-#   extrapolated.
-# - A probe sitting at its 100 % ceiling cannot be calibrated at all; those
-#   probe-days carry no comparison state.
-#
-# The correction is subtractive because a multiplicative one cancels against
-# the normalisation, which divides by a percentile of the same series. Being a
-# constant offset over the window, it cancels exactly at saturation: numerator
-# and denominator shift together, so a full pot stays at 100 % however the
-# salinity moves.
-EC_COMPENSATION_REFERENCE = 180.0  # uS/cm
-EC_REFERENCE_BAND = 0.97  # how far below the percentile the comparison band reaches
-DEFAULT_EC_COMPENSATION = 0.0  # off; 19.7 measured for Xiaomi/MiFlora in coco
-
 # Pore water EC. The probe reads the EC of the pot as a whole -- water, coco and
 # air -- and that reading falls as the pot dries although no salt leaves.
 #
@@ -501,7 +451,6 @@ CONF_DEFAULT_MIN_POWER_CONSUMPTION = "default_min_power_consumption"
 CONF_DEFAULT_MAX_POWER_CONSUMPTION = "default_max_power_consumption"
 CONF_DEFAULT_MAX_PH = "default_max_ph"  # Neue Konstanten für pH
 CONF_DEFAULT_MIN_PH = "default_min_ph"
-CONF_DEFAULT_EC_COMPENSATION = "default_ec_compensation"
 CONF_DEFAULT_PORE_EXPONENT = "default_pore_exponent"
 CONF_DEFAULT_LUX_TO_PPFD = "default_lux_to_ppfd"
 

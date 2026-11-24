@@ -895,8 +895,7 @@ class PlantDevice(RestoreEntity):
         # Neue Property für lux_to_ppfd
         self.lux_to_ppfd = None
 
-        # EC-Querempfindlichkeit der Feuchtesonde und Porenwasser-Exponent
-        self.ec_compensation = None
+        # Porenwasser-Exponent
         self.pore_exponent = None
 
         # Hole den kWh Preis aus dem Konfigurationsknoten
@@ -1377,9 +1376,8 @@ class PlantDevice(RestoreEntity):
                 "type": "number"
             }
 
-        # EC compensation / pore water exponent Numbers
-        for key, entity in (("ec_compensation", self.ec_compensation),
-                            ("pore_exponent", self.pore_exponent)):
+        # Pore water exponent Number
+        for key, entity in (("pore_exponent", self.pore_exponent),):
             if entity:
                 helpers[key] = {
                     "entity_id": entity.entity_id,
@@ -2448,10 +2446,6 @@ class PlantDevice(RestoreEntity):
     def add_lux_to_ppfd(self, lux_to_ppfd) -> None:
         """Add lux to PPFD conversion factor entity."""
         self.lux_to_ppfd = lux_to_ppfd
-
-    def add_ec_compensation(self, ec_compensation) -> None:
-        """Add the EC compensation factor entity."""
-        self.ec_compensation = ec_compensation
 
     def add_pore_exponent(self, pore_exponent) -> None:
         """Add the pore water EC exponent entity."""

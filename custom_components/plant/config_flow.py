@@ -35,10 +35,8 @@ from .const import (
     CONDUCTIVITY_MODE_BULK,
     CONDUCTIVITY_MODE_PORE_WATER,
     DEFAULT_CONDUCTIVITY_MODE,
-    CONF_DEFAULT_EC_COMPENSATION,
     CONF_DEFAULT_PORE_EXPONENT,
     CONF_DEFAULT_LUX_TO_PPFD,
-    DEFAULT_EC_COMPENSATION,
     DEFAULT_PORE_EXPONENT,
     DEFAULT_LUX_TO_PPFD,
     AGGREGATION_MEDIAN,
@@ -276,7 +274,6 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     "default_normalize_moisture": False,
                     "default_normalize_window": DEFAULT_NORMALIZE_WINDOW,
                     "default_normalize_percentile": DEFAULT_NORMALIZE_PERCENTILE,
-                    CONF_DEFAULT_EC_COMPENSATION: DEFAULT_EC_COMPENSATION,
                     CONF_DEFAULT_PORE_EXPONENT: DEFAULT_PORE_EXPONENT,
                     CONF_DEFAULT_LUX_TO_PPFD: DEFAULT_LUX_TO_PPFD,
 
@@ -1027,7 +1024,6 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     "default_normalize_moisture": "default_normalize_moisture",
                     "default_normalize_window": "default_normalize_window",
                     "default_normalize_percentile": "default_normalize_percentile",
-                    CONF_DEFAULT_EC_COMPENSATION: CONF_DEFAULT_EC_COMPENSATION,
                     CONF_DEFAULT_PORE_EXPONENT: CONF_DEFAULT_PORE_EXPONENT,
                     CONF_DEFAULT_LUX_TO_PPFD: CONF_DEFAULT_LUX_TO_PPFD,
                     CONF_DEFAULT_MAX_MOISTURE: CONF_DEFAULT_MAX_MOISTURE,
@@ -1350,10 +1346,6 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     "default_normalize_percentile",
                     default=self.entry.data[FLOW_PLANT_INFO].get("default_normalize_percentile", DEFAULT_NORMALIZE_PERCENTILE)
                 ): cv.positive_int,
-                vol.Optional(
-                    CONF_DEFAULT_EC_COMPENSATION,
-                    default=self.entry.data[FLOW_PLANT_INFO].get(CONF_DEFAULT_EC_COMPENSATION, DEFAULT_EC_COMPENSATION)
-                ): vol.Coerce(float),
                 vol.Optional(
                     CONF_DEFAULT_PORE_EXPONENT,
                     default=self.entry.data[FLOW_PLANT_INFO].get(CONF_DEFAULT_PORE_EXPONENT, DEFAULT_PORE_EXPONENT)
