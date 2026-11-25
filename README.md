@@ -74,8 +74,14 @@ EC_pore = 2.7 × EC_probe / (moisture/100) ^ exponent
   stays flat through a cycle — unless the plant concentrates the solution while
   drinking (it rises) or takes up more nutrient than water (it falls), which is
   what the value is there to show. Change it only for a different medium.
-- **Moisture** is the normalised reading without the EC correction. Keep
-  normalisation on: the division assumes a saturated pot reads 100 %.
+- **Moisture** is the normalised reading. Keep normalisation on: the division
+  assumes a saturated pot reads 100 %.
+- The published value is a **trailing 30 min median**, fixed, no setting. The
+  water reaches the probe before the dissolved salts do: after a shot the
+  moisture channel is up within three minutes while the EC channel sits still
+  for another four and then jumps. Dividing one by the other in that window
+  throws the estimate off by 15 % upwards, median over eight probes; the median
+  leaves 3 %, and costs nothing in the settled part of a cycle.
 - The estimate gets noisier the drier the pot, because the divisor shrinks
   faster than the probe EC falls, and a single exponent over-corrects at the
   dry end. It is published anyway; only a moisture of zero leaves nothing to

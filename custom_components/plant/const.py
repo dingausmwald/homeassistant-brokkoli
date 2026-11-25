@@ -202,6 +202,17 @@ CONDUCTIVITY_MODE_PORE_WATER = "pore_water"
 DEFAULT_CONDUCTIVITY_MODE = CONDUCTIVITY_MODE_BULK
 DEFAULT_PORE_EXPONENT = 2.0
 PORE_WATER_SCALE = 2.7
+# The published pore water value is a trailing median over this window.
+# The water reaches the probe before the dissolved salts do: after a shot the
+# moisture channel is up within three minutes while the EC channel sits still
+# for another four and then jumps (one measured shot: moisture 44 -> 63.5 with
+# the EC flat at 158, then 158 -> 306 in two minutes). Dividing one by the
+# other in that window throws the estimate off by 15 % upwards and 2 % down,
+# median over eight probes. A 30 min median leaves 3 % and 7 %, and costs
+# nothing in the settled part of a cycle, where the variation stays at 2-3 %.
+# Shifting the moisture back in time instead makes it worse, because the EC
+# does not lag at the onset -- it overshoots at once and decays more slowly.
+PORE_SMOOTH_WINDOW_MINUTES = 30
 
 SERVICE_REPLACE_SENSOR = "replace_sensor"
 SERVICE_REMOVE_PLANT = "remove_plant"

@@ -69,6 +69,7 @@ from .const import (
     DEFAULT_CONDUCTIVITY_MODE,
     DEFAULT_PORE_EXPONENT,
     PORE_WATER_SCALE,
+    PORE_SMOOTH_WINDOW_MINUTES,
     DOMAIN,
     DOMAIN_SENSOR,
     FLOW_PLANT_INFO,
@@ -623,6 +624,8 @@ class PlantCurrentConductivity(PlantCurrentStatus):
         self._mode = config.data[FLOW_PLANT_INFO].get(
             ATTR_CONDUCTIVITY_MODE, DEFAULT_CONDUCTIVITY_MODE
         )
+        self._pore_buffer = []  # (timestamp, unsmoothed pore water value)
+        self._last_pore_ts = None
 
         super().__init__(hass, config, plantdevice)
 
@@ -637,6 +640,8 @@ class PlantCurrentConductivity(PlantCurrentStatus):
                 "moisture_used": self._moisture_for_pore_ec(),
                 "scale": PORE_WATER_SCALE,
                 "exponent": self._pore_exponent(),
+                "smoothing_minutes": PORE_SMOOTH_WINDOW_MINUTES,
+                "samples": len(self._pore_buffer),
             }
         })
         return attributes
@@ -679,7 +684,7 @@ class PlantCurrentConductivity(PlantCurrentStatus):
             return None
         return moisture if moisture > 0 else None
 
-    def _apply_mode(self) -> None:
+    def _apply_mode(self, timestamp=None, add: bool = True) -> None:
         """Set the published value from the raw reading.
 
         The probe reads the pot as a whole, and its EC falls as the pot dries
@@ -702,6 +707,8 @@ class PlantCurrentConductivity(PlantCurrentStatus):
             self._attr_native_value = None
             return
         if self._mode != CONDUCTIVITY_MODE_PORE_WATER:
+            self._pore_buffer = []
+            self._last_pore_ts = None
             self._attr_native_value = self._raw_value
             return
         moisture = self._moisture_for_pore_ec()
@@ -714,9 +721,43 @@ class PlantCurrentConductivity(PlantCurrentStatus):
                 * float(self._raw_value)
                 / (moisture / 100.0) ** self._pore_exponent()
             )
-            self._attr_native_value = round(pore, 1)
         except (ValueError, TypeError, ZeroDivisionError, OverflowError):
             self._attr_native_value = None
+            return
+        if add:
+            self._add_pore_sample(pore, timestamp)
+        self._attr_native_value = self._smoothed_pore(pore)
+
+    def _add_pore_sample(self, value, timestamp=None) -> None:
+        """Take one estimate into the smoothing window.
+
+        Deduplicated on the source timestamp, as in the moisture sensor: the
+        state is replayed on a reload and when the external sensor is replaced,
+        and a duplicate would pull the median towards that value.
+        """
+        if timestamp is not None and timestamp == self._last_pore_ts:
+            return
+        self._last_pore_ts = timestamp
+        self._pore_buffer.append((timestamp or dt_util.utcnow(), value))
+        cutoff = dt_util.utcnow() - timedelta(minutes=PORE_SMOOTH_WINDOW_MINUTES)
+        self._pore_buffer = [s for s in self._pore_buffer if s[0] >= cutoff]
+
+    def _smoothed_pore(self, current):
+        """The published value: median_low over the window, see const.py.
+
+        median_low rather than median, so the value is one that was actually
+        computed from a reading instead of the average of two.
+
+        Pruned here as well as on insert: a probe that stops reporting would
+        otherwise keep its last readings in the median indefinitely, because
+        nothing adds to the window any more.
+        """
+        cutoff = dt_util.utcnow() - timedelta(minutes=PORE_SMOOTH_WINDOW_MINUTES)
+        self._pore_buffer = [s for s in self._pore_buffer if s[0] >= cutoff]
+        values = [v for _, v in self._pore_buffer]
+        if len(values) < MIN_SMOOTH_SAMPLES:
+            return round(current, 1)
+        return round(median_low(values), 1)
 
     @callback
     def state_changed(self, entity_id, new_state):
@@ -735,7 +776,7 @@ class PlantCurrentConductivity(PlantCurrentStatus):
         self._attr_native_value = None
         super().state_changed(entity_id, new_state)
         self._raw_value = self._attr_native_value
-        self._apply_mode()
+        self._apply_mode(getattr(new_state, "last_updated", None))
 
     async def async_update(self) -> None:
         """Update the sensor."""
@@ -745,16 +786,22 @@ class PlantCurrentConductivity(PlantCurrentStatus):
         self._attr_native_value = None
         await super().async_update()
         self._raw_value = self._attr_native_value
-        self._apply_mode()
+        # Der Poll liefert keine neue Messung, nur eine Neuveroeffentlichung --
+        # sonst landete derselbe Wert mehrfach im Median.
+        self._apply_mode(add=False)
 
     async def async_rescale(self) -> None:
         """Recompute after a setting changed, without counting it as consumption.
 
-        The mode, the pore water exponent and the EC factor of the moisture all
-        change the scale of the published value, and the fertilizer consumption
-        sums every step down of it.
+        The mode and the pore water exponent change the scale of the published
+        value, and the fertilizer consumption sums every step down of it. The
+        smoothing window is dropped as well, because the readings in it were
+        computed on the old scale.
         """
         before = self.native_value
+        # Die Skala aendert sich, alte Werte im Median waeren auf der alten.
+        self._pore_buffer = []
+        self._last_pore_ts = None
         await self.async_update()
         consumption = getattr(self._plant, "fertilizer_consumption", None)
         if consumption is not None:
