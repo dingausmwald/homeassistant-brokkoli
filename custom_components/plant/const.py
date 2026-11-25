@@ -214,6 +214,38 @@ PORE_WATER_SCALE = 2.7
 # does not lag at the onset -- it overshoots at once and decays more slowly.
 PORE_SMOOTH_WINDOW_MINUTES = 30
 
+# Finding field capacity from the irrigation itself, rather than from a
+# percentile over everything the window holds.
+#
+# Every shot that runs to drain leaves the same signature in the raw reading: a
+# rise within a few minutes, a peak while the solution still flows past the
+# probe, and a fall back as the excess drains. Measured on eight probes over
+# 356 waterings, the peak sits 0.6 to 1.4 minutes from the valve closing, and
+# the fall back from it is 5 to 11 raw points. The pot is at field capacity
+# once that has settled, 80 to 120 minutes later.
+#
+# Taking the percentile over the settled readings of the last few waterings,
+# instead of over the whole window, keeps the statistic as steady as before
+# (standard deviation 0.7 to 9.0 raw points against 0.9 to 9.1) while following
+# a step change four times faster: after a flush drops the reading by 10 raw
+# points, it has taken over 80 to 100 % of that within 24 hours, where the
+# window percentile needs 48. That matters because the published value reads
+# low until the reference has followed, and an automatic irrigation driven by
+# it then waters more, which keeps the pot full and the reading low.
+#
+# A single watering would be faster still but rests on one event; the pool of
+# the last PEAK_EVENTS keeps the percentile's robustness. Below
+# PEAK_MIN_SAMPLES readings in that pool -- a new plant, a restart with an
+# empty recorder, or a pot that is never watered to drain -- the percentile
+# over the whole window is used instead.
+PEAK_RISE = 3.0          # raw points, within PEAK_RISE_WINDOW, to call it a watering
+PEAK_RISE_WINDOW = 15    # minutes
+PEAK_FALL = 2.0          # raw points the reading drops back from the peak
+PEAK_SETTLE_FROM = 80    # minutes after the peak, where field capacity is read
+PEAK_SETTLE_TO = 120
+PEAK_EVENTS = 3          # waterings the reference is pooled over
+PEAK_MIN_SAMPLES = 15    # below this the window percentile is used
+
 SERVICE_REPLACE_SENSOR = "replace_sensor"
 SERVICE_REMOVE_PLANT = "remove_plant"
 SERVICE_REMOVE_CYCLE = "remove_cycle"

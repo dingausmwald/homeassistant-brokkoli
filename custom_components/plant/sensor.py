@@ -109,6 +109,13 @@ from .const import (
     ATTR_NORMALIZE_WINDOW,
     ATTR_NORMALIZE_PERCENTILE,
     MIN_SMOOTH_SAMPLES,
+    PEAK_RISE,
+    PEAK_RISE_WINDOW,
+    PEAK_FALL,
+    PEAK_SETTLE_FROM,
+    PEAK_SETTLE_TO,
+    PEAK_EVENTS,
+    PEAK_MIN_SAMPLES,
     SMOOTH_WINDOW_MINUTES,
     DEFAULT_NORMALIZE_WINDOW,
     DEFAULT_NORMALIZE_PERCENTILE,
@@ -842,6 +849,8 @@ class PlantCurrentMoisture(PlantCurrentStatus):
             ATTR_NORMALIZE_PERCENTILE, DEFAULT_NORMALIZE_PERCENTILE
         )
         self._max_moisture_raw = None  # percentile of the raw readings
+        self._max_moisture_source = "window"  # "peaks" or "window", see const.py
+        self._max_moisture_samples = 0
         self._last_normalize_update = None
 
         self._smooth_buffer = []  # (timestamp, reading)
@@ -900,17 +909,91 @@ class PlantCurrentMoisture(PlantCurrentStatus):
                 raw_values.append(float(state.state))
             except (TypeError, ValueError):
                 continue
-        raw_max = self._percentile(raw_values)
+        # Preferred: the percentile of the settled readings after the last few
+        # waterings, which is field capacity. Falls back to the percentile over
+        # the whole window when the window holds too few of them.
+        settled = self._settled_readings(moisture_states)
+        source = "peaks"
+        if len(settled) >= PEAK_MIN_SAMPLES:
+            raw_max = self._percentile(settled)
+        else:
+            raw_max = self._percentile(raw_values)
+            source = "window"
         self._max_moisture_raw = raw_max if raw_max and raw_max > 0 else None
+        self._max_moisture_source = source
+        self._max_moisture_samples = len(settled)
 
         self._last_normalize_update = now
         if self._max_moisture:
             self._normalize_factor = 100 / self._max_moisture  # Exakter Wert für Berechnungen
         _LOGGER.debug(
-            "Updated moisture window: maximum=%s (from %s values)",
+            "Updated moisture window: maximum=%s from %s (%s settled of %s values)",
             self._max_moisture_raw,
+            source,
+            len(settled),
             len(raw_values),
         )
+
+    @staticmethod
+    def _watering_peaks(samples):
+        """Timestamps of the waterings in the window, from the reading alone.
+
+        A rise of PEAK_RISE within PEAK_RISE_WINDOW, then the highest reading
+        of the following half hour, then a fall back of PEAK_FALL as the excess
+        drains. const.py records how the thresholds were measured. Read strictly
+        forwards, and the next event is only looked for well after the peak, so
+        one watering cannot be counted twice.
+        """
+        peaks = []
+        i = 0
+        n = len(samples)
+        while i < n:
+            t0, v0 = samples[i]
+            j = i
+            top = i
+            while j < n and samples[j][0] - t0 <= timedelta(minutes=PEAK_RISE_WINDOW):
+                if samples[j][1] > samples[top][1]:
+                    top = j
+                j += 1
+            if samples[top][1] - v0 < PEAK_RISE:
+                i += 1
+                continue
+            k = top
+            while k < n and samples[k][0] - samples[top][0] <= timedelta(minutes=30):
+                if samples[k][1] > samples[top][1]:
+                    top = k
+                k += 1
+            tpk, vpk = samples[top]
+            after = [v for t, v in samples[top + 1:] if t - tpk <= timedelta(minutes=60)]
+            if not after or vpk - min(after) < PEAK_FALL:
+                i += 1
+                continue
+            peaks.append(tpk)
+            while i < n and samples[i][0] - tpk <= timedelta(minutes=90):
+                i += 1
+        return peaks
+
+    def _settled_readings(self, moisture_states):
+        """Readings taken while the pot stood at field capacity.
+
+        PEAK_SETTLE_FROM to PEAK_SETTLE_TO minutes after each of the last
+        PEAK_EVENTS waterings, pooled.
+        """
+        samples = []
+        for state in moisture_states:
+            try:
+                samples.append((state.last_updated, float(state.state)))
+            except (TypeError, ValueError):
+                continue
+        samples.sort(key=lambda s: s[0])
+        if len(samples) < 2:
+            return []
+        pool = []
+        for tpk in self._watering_peaks(samples)[-PEAK_EVENTS:]:
+            lo = tpk + timedelta(minutes=PEAK_SETTLE_FROM)
+            hi = tpk + timedelta(minutes=PEAK_SETTLE_TO)
+            pool += [v for t, v in samples if lo <= t <= hi]
+        return pool
 
     @property
     def extra_state_attributes(self) -> dict:
@@ -924,6 +1007,8 @@ class PlantCurrentMoisture(PlantCurrentStatus):
                     "window_days": self._normalize_window,
                     "percentile": self._normalize_percentile,
                     "current_max": self._max_moisture,
+                    "source": self._max_moisture_source,
+                    "settled_samples": self._max_moisture_samples,
                     "raw_value": self._raw_value if hasattr(self, '_raw_value') else None,
                 }
             })
