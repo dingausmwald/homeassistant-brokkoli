@@ -233,18 +233,22 @@ PORE_SMOOTH_WINDOW_MINUTES = 30
 # low until the reference has followed, and an automatic irrigation driven by
 # it then waters more, which keeps the pot full and the reading low.
 #
-# A single watering would be faster still but rests on one event; the pool of
-# the last PEAK_EVENTS keeps the percentile's robustness. Below
-# PEAK_MIN_SAMPLES readings in that pool -- a new plant, a restart with an
-# empty recorder, or a pot that is never watered to drain -- the percentile
-# over the whole window is used instead.
+# The pool is the last watering alone. Pooling several was measured as well and
+# gained nothing: standard deviation 0.7 to 9.0 raw points against 0.6 to 8.8
+# for the single event, at the same speed. One watering leaves 13 to 37 readings
+# in the settling window, which is enough for a percentile; the probes do not
+# report every minute, so the count varies. The most recent watering whose
+# settling window has passed and holds at least PEAK_MIN_SAMPLES readings is
+# used -- the one just gone has not settled yet. Where none does, as for a new
+# plant, a restart with an empty recorder, or a pot that is never watered to
+# drain, the percentile over the whole window is used instead.
 PEAK_RISE = 3.0          # raw points, within PEAK_RISE_WINDOW, to call it a watering
 PEAK_RISE_WINDOW = 15    # minutes
 PEAK_FALL = 2.0          # raw points the reading drops back from the peak
 PEAK_SETTLE_FROM = 80    # minutes after the peak, where field capacity is read
 PEAK_SETTLE_TO = 120
-PEAK_EVENTS = 3          # waterings the reference is pooled over
-PEAK_MIN_SAMPLES = 15    # below this the window percentile is used
+PEAK_EVENTS = 1          # waterings the reference is taken from
+PEAK_MIN_SAMPLES = 8     # below this the window percentile is used
 
 SERVICE_REPLACE_SENSOR = "replace_sensor"
 SERVICE_REMOVE_PLANT = "remove_plant"

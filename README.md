@@ -40,10 +40,10 @@ field capacity. Every shot that runs to drain leaves the same signature: a rise
 within a few minutes, a peak while the solution still flows past the probe, and
 a fall back as the excess drains. Over 356 waterings on eight probes that peak
 sat 0.6 to 1.4 minutes from the valve closing. The pot is at field capacity once
-it has settled, 80 to 120 minutes later, and the percentile is pooled over the
-last three waterings. Where the window holds too few of them — a new plant, a
-restart, or a pot that is never watered to drain — the percentile over the whole
-window is used instead.
+it has settled, 80 to 120 minutes later. The percentile is taken over that one
+watering: the most recent whose settling window has passed and holds enough
+readings. Where the window holds none — a new plant, a restart, or a pot that is
+never watered to drain — the percentile over the whole window is used instead.
 
 Three `number` entities per plant set it: the window in days, the
 percentile, and whether to normalise at all. Steering on the dryback from

@@ -976,8 +976,10 @@ class PlantCurrentMoisture(PlantCurrentStatus):
     def _settled_readings(self, moisture_states):
         """Readings taken while the pot stood at field capacity.
 
-        PEAK_SETTLE_FROM to PEAK_SETTLE_TO minutes after each of the last
-        PEAK_EVENTS waterings, pooled.
+        PEAK_SETTLE_FROM to PEAK_SETTLE_TO minutes after a watering. Walked
+        backwards from the newest, so the reference comes from the most recent
+        watering whose settling window has passed and holds enough readings:
+        the one just gone has not settled yet, and an older one would be stale.
         """
         samples = []
         for state in moisture_states:
@@ -988,12 +990,14 @@ class PlantCurrentMoisture(PlantCurrentStatus):
         samples.sort(key=lambda s: s[0])
         if len(samples) < 2:
             return []
-        pool = []
-        for tpk in self._watering_peaks(samples)[-PEAK_EVENTS:]:
+        peaks = self._watering_peaks(samples)
+        for tpk in reversed(peaks[-PEAK_EVENTS - 2:]):
             lo = tpk + timedelta(minutes=PEAK_SETTLE_FROM)
             hi = tpk + timedelta(minutes=PEAK_SETTLE_TO)
-            pool += [v for t, v in samples if lo <= t <= hi]
-        return pool
+            pool = [v for t, v in samples if lo <= t <= hi]
+            if len(pool) >= PEAK_MIN_SAMPLES:
+                return pool
+        return []
 
     @property
     def extra_state_attributes(self) -> dict:
