@@ -42,8 +42,14 @@ a fall back as the excess drains. Over 356 waterings on eight probes that peak
 sat 0.6 to 1.4 minutes from the valve closing. The pot is at field capacity once
 it has settled, 80 to 120 minutes later. The percentile is taken over that one
 watering: the most recent whose settling window has passed and holds enough
-readings. Where the window holds none — a new plant, a restart, or a pot that is
-never watered to drain — the percentile over the whole window is used instead.
+readings.
+
+There is no second path. A fallback to the percentile over the whole window
+would be invisible from the outside and could quietly become the only path if
+detection stopped working. A plant whose window holds no watering — freshly
+potted into moist medium and not yet watered — publishes no moisture until it
+has been watered once. A restart is not such a case: the reference is rebuilt
+from the recorder, which holds far more than the window.
 
 Three `number` entities per plant set it: the window in days, the
 percentile, and whether to normalise at all. Steering on the dryback from

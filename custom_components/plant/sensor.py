@@ -849,8 +849,7 @@ class PlantCurrentMoisture(PlantCurrentStatus):
             ATTR_NORMALIZE_PERCENTILE, DEFAULT_NORMALIZE_PERCENTILE
         )
         self._max_moisture_raw = None  # percentile of the raw readings
-        self._max_moisture_source = "window"  # "peaks" or "window", see const.py
-        self._max_moisture_samples = 0
+        self._max_moisture_samples = 0  # readings the reference was taken from
         self._last_normalize_update = None
 
         self._smooth_buffer = []  # (timestamp, reading)
@@ -909,27 +908,25 @@ class PlantCurrentMoisture(PlantCurrentStatus):
                 raw_values.append(float(state.state))
             except (TypeError, ValueError):
                 continue
-        # Preferred: the percentile of the settled readings after the last few
-        # waterings, which is field capacity. Falls back to the percentile over
-        # the whole window when the window holds too few of them.
+        # The percentile of the settled readings after the last watering, which
+        # is field capacity. No second path: a fallback to the percentile over
+        # the whole window would be invisible from the outside, could quietly
+        # become the only path if detection stopped working, and would answer
+        # with a different number than the one the plant is scaled by the rest
+        # of the time. Without a watering in the window there is nothing to
+        # scale against and nothing is published.
         settled = self._settled_readings(moisture_states)
-        source = "peaks"
-        if len(settled) >= PEAK_MIN_SAMPLES:
-            raw_max = self._percentile(settled)
-        else:
-            raw_max = self._percentile(raw_values)
-            source = "window"
+        raw_max = self._percentile(settled) if len(settled) >= PEAK_MIN_SAMPLES else None
         self._max_moisture_raw = raw_max if raw_max and raw_max > 0 else None
-        self._max_moisture_source = source
         self._max_moisture_samples = len(settled)
 
         self._last_normalize_update = now
         if self._max_moisture:
             self._normalize_factor = 100 / self._max_moisture  # Exakter Wert für Berechnungen
         _LOGGER.debug(
-            "Updated moisture window: maximum=%s from %s (%s settled of %s values)",
+            "Updated moisture window: maximum=%s from %s settled readings "
+            "after the last watering (%s values in the window)",
             self._max_moisture_raw,
-            source,
             len(settled),
             len(raw_values),
         )
@@ -1011,7 +1008,6 @@ class PlantCurrentMoisture(PlantCurrentStatus):
                     "window_days": self._normalize_window,
                     "percentile": self._normalize_percentile,
                     "current_max": self._max_moisture,
-                    "source": self._max_moisture_source,
                     "settled_samples": self._max_moisture_samples,
                     "raw_value": self._raw_value if hasattr(self, '_raw_value') else None,
                 }

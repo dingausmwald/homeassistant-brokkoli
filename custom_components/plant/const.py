@@ -239,9 +239,15 @@ PORE_SMOOTH_WINDOW_MINUTES = 30
 # in the settling window, which is enough for a percentile; the probes do not
 # report every minute, so the count varies. The most recent watering whose
 # settling window has passed and holds at least PEAK_MIN_SAMPLES readings is
-# used -- the one just gone has not settled yet. Where none does, as for a new
-# plant, a restart with an empty recorder, or a pot that is never watered to
-# drain, the percentile over the whole window is used instead.
+# used -- the one just gone has not settled yet.
+#
+# There is no second path. Falling back to the percentile over the whole window
+# would be invisible from the outside, could quietly become the only path if
+# detection stopped working, and would answer with a different number than the
+# one the plant is scaled by the rest of the time. A plant whose window holds no
+# watering -- freshly potted into moist medium and not yet watered -- publishes
+# no moisture until it has been watered once. A restart is not such a case: the
+# reference is rebuilt from the recorder, which holds far more than the window.
 PEAK_RISE = 3.0          # raw points, within PEAK_RISE_WINDOW, to call it a watering
 PEAK_RISE_WINDOW = 15    # minutes
 PEAK_FALL = 2.0          # raw points the reading drops back from the peak
