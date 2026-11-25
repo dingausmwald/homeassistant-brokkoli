@@ -36,7 +36,7 @@ moisture = raw / percentile(field capacity readings) × 100
 ```
 
 The readings it takes that percentile over are the ones where the pot stood at
-field capacity. Every shot that runs to drain leaves the same signature: a rise
+field capacity, found in the readings as they arrive. Every shot that runs to drain leaves the same signature: a rise
 within a few minutes, a peak while the solution still flows past the probe, and
 a fall back as the excess drains. Over 356 waterings on eight probes that peak
 sat 0.6 to 1.4 minutes from the valve closing. The pot is at field capacity once
@@ -44,12 +44,16 @@ it has settled, 80 to 120 minutes later. The percentile is taken over that one
 watering: the most recent whose settling window has passed and holds enough
 readings.
 
-There is no second path. A fallback to the percentile over the whole window
-would be invisible from the outside and could quietly become the only path if
-detection stopped working. A plant whose window holds no watering — freshly
-potted into moist medium and not yet watered — publishes no moisture until it
-has been watered once. A restart is not such a case: the reference is rebuilt
-from the recorder, which holds far more than the window.
+There is no second path. A fallback to a percentile over everything would be
+invisible from the outside and could quietly become the only path if detection
+stopped working.
+
+Nothing is read back from the database. The sensor keeps the last 150 minutes
+of readings in memory — long enough for a peak plus its settling window — and
+works on those as they arrive. The reference survives a restart because it is
+stored with the entity, and a plant that was just created gets a provisional
+one from the highest reading of its first five minutes, replaced by a measured
+one at its first watering.
 
 Three `number` entities per plant set it: the window in days, the
 percentile, and whether to normalise at all. Steering on the dryback from

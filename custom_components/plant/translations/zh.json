@@ -37,7 +37,6 @@
           "power_consumption_sensor": "功耗传感器",
           "ph_sensor": "pH传感器",
           "normalize_moisture": "标准化湿度值",
-          "normalize_window": "标准化窗口（天）",
           "normalize_percentile": "标准化百分位数",
           "pot_size": "花盆大小（升）",
           "water_capacity": "水容量（升）"

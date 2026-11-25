@@ -37,7 +37,6 @@
           "power_consumption_sensor": "Energiafogyasztás szenzor",
           "ph_sensor": "pH szenzor",
           "normalize_moisture": "Nedvesség értékek normalizálása",
-          "normalize_window": "Normalizálási ablak (nap)",
           "normalize_percentile": "Normalizálási percentilis",
           "pot_size": "Cserép méret (L)",
           "water_capacity": "Víz kapacitás (L)"

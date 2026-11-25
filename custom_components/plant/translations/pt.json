@@ -37,7 +37,6 @@
           "power_consumption_sensor": "Sensor de consumo de energia",
           "ph_sensor": "Sensor de pH",
           "normalize_moisture": "Normalizar valores de umidade",
-          "normalize_window": "Janela de normalização (dias)",
           "normalize_percentile": "Percentil de normalização",
           "pot_size": "Tamanho do vaso (L)",
           "water_capacity": "Capacidade de água (L)"

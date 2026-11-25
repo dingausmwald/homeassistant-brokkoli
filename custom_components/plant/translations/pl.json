@@ -37,7 +37,6 @@
           "power_consumption_sensor": "Czujnik zużycia energii",
           "ph_sensor": "Czujnik pH",
           "normalize_moisture": "Normalizuj wartości wilgotności",
-          "normalize_window": "Okno normalizacji (dni)",
           "normalize_percentile": "Percentyl normalizacji",
           "pot_size": "Rozmiar doniczki (l)",
           "water_capacity": "Pojemność wody (l)"

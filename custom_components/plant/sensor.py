@@ -51,7 +51,6 @@ from homeassistant.helpers.entity import (
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_state_change_event, async_call_later
 from homeassistant.util import dt as dt_util
-from homeassistant.components.recorder import history, get_instance
 
 from . import SETUP_DUMMY_SENSORS
 from .const import (
@@ -106,7 +105,6 @@ from .const import (
     DEFAULT_AGGREGATIONS,
     ATTR_IS_NEW_PLANT,
     ATTR_NORMALIZE_MOISTURE,
-    ATTR_NORMALIZE_WINDOW,
     ATTR_NORMALIZE_PERCENTILE,
     MIN_SMOOTH_SAMPLES,
     PEAK_RISE,
@@ -114,10 +112,10 @@ from .const import (
     PEAK_FALL,
     PEAK_SETTLE_FROM,
     PEAK_SETTLE_TO,
-    PEAK_EVENTS,
     PEAK_MIN_SAMPLES,
+    PEAK_BUFFER_MINUTES,
+    PEAK_SEED_MINUTES,
     SMOOTH_WINDOW_MINUTES,
-    DEFAULT_NORMALIZE_WINDOW,
     DEFAULT_NORMALIZE_PERCENTILE,
     ICON_WATER_CONSUMPTION,
     UNIT_VOLUME,
@@ -181,6 +179,34 @@ class PlantHistoryExtraStoredData(SensorExtraStoredData):
             basis.native_value,
             basis.native_unit_of_measurement,
             restored.get("history") or [],
+        )
+
+
+@dataclass
+class MoistureReferenceExtraStoredData(SensorExtraStoredData):
+    """Restore-Daten des Feuchtesensors samt seiner Feldkapazitaets-Referenz.
+
+    Die Referenz wird nicht mehr aus der Historie nachgerechnet, sondern im
+    Betrieb aus den Gießvorgaengen gewonnen. Ohne sie hier mitzunehmen stuende
+    eine Pflanze nach jedem Neustart ohne Massstab da.
+    """
+
+    max_moisture_raw: float | None = None
+
+    def as_dict(self) -> dict:
+        daten = super().as_dict()
+        daten["max_moisture_raw"] = self.max_moisture_raw
+        return daten
+
+    @classmethod
+    def from_dict(cls, restored: dict) -> MoistureReferenceExtraStoredData | None:
+        basis = SensorExtraStoredData.from_dict(restored)
+        if basis is None:
+            return None
+        return cls(
+            basis.native_value,
+            basis.native_unit_of_measurement,
+            restored.get("max_moisture_raw"),
         )
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
@@ -842,15 +868,14 @@ class PlantCurrentMoisture(PlantCurrentStatus):
         super().__init__(hass, config, plantdevice)
 
         self._normalize = config.data[FLOW_PLANT_INFO].get(ATTR_NORMALIZE_MOISTURE, False)
-        self._normalize_window = config.data[FLOW_PLANT_INFO].get(
-            ATTR_NORMALIZE_WINDOW, DEFAULT_NORMALIZE_WINDOW
-        )
         self._normalize_percentile = config.data[FLOW_PLANT_INFO].get(
             ATTR_NORMALIZE_PERCENTILE, DEFAULT_NORMALIZE_PERCENTILE
         )
-        self._max_moisture_raw = None  # percentile of the raw readings
-        self._max_moisture_samples = 0  # readings the reference was taken from
-        self._last_normalize_update = None
+        self._max_moisture_raw = None  # the reference, see const.py
+        self._max_moisture_samples = 0  # readings it was taken from
+        self._peak_buffer = []  # (timestamp, raw reading), PEAK_BUFFER_MINUTES long
+        self._last_peak_used = None  # the watering the reference came from
+        self._seed_until = None  # end of the seeding window, see const.py
 
         self._smooth_buffer = []  # (timestamp, reading)
         self._smoothed_value = None
@@ -860,76 +885,90 @@ class PlantCurrentMoisture(PlantCurrentStatus):
         """When entity is added to hass."""
         await super().async_added_to_hass()
         
-        # Initialisiere Normalisierung beim Start
+        # The reference is not recomputed from history: it is restored, and
+        # from then on the readings themselves keep it current.
         if self._normalize:
-            self._last_normalize_update = None  # Force update
-            await self._update_normalization()
+            extra = await self.async_get_last_extra_data()
+            if extra is not None:
+                stored = (extra.as_dict() or {}).get("max_moisture_raw")
+                try:
+                    value = float(stored)
+                except (TypeError, ValueError):
+                    value = None
+                if value and value > 0:
+                    self._max_moisture_raw = value
+                    _LOGGER.debug("Restored moisture reference %s for %s",
+                                  value, self.entity_id)
 
-            # Wenn es eine Neuerstellung ist, aktualisiere sofort
-            if self._config.data[FLOW_PLANT_INFO].get(ATTR_IS_NEW_PLANT, False):
-                _LOGGER.debug("New plant created, updating normalization immediately")
-                await self._update_normalization()
-
-    async def _update_normalization(self) -> None:
-        """Refresh the window statistic the published value is scaled by."""
-        if not self._external_sensor or not self._normalize:
+    def _note_reading(self, value, timestamp=None) -> None:
+        """Take one reading into the peak buffer and refresh the reference."""
+        if not self._normalize:
             return
-
-        now = dt_util.utcnow()
-        
-        # Aktualisiere nur alle 5 Minuten, außer bei None (Erststart/Neuerstellung)
-        if (self._last_normalize_update is not None and 
-            now - self._last_normalize_update < timedelta(minutes=5)):
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
             return
+        when = timestamp or dt_util.utcnow()
+        if self._peak_buffer and when <= self._peak_buffer[-1][0]:
+            return                      # replay of a reading already held
+        self._peak_buffer.append((when, numeric))
+        cutoff = when - timedelta(minutes=PEAK_BUFFER_MINUTES)
+        self._peak_buffer = [s for s in self._peak_buffer if s[0] >= cutoff]
+        self._seed_reference(when)
+        self._update_reference(when)
 
-        # Hole historische Daten
-        start_time = now - timedelta(days=self._normalize_window)
-        
-        # Korrigierter Aufruf der history API mit dem richtigen Executor
-        recorder = get_instance(self._hass)
-        history_list = await recorder.async_add_executor_job(
-            history.state_changes_during_period,
-            self._hass,
-            start_time,
-            now,
-            self._external_sensor
-        )
+    def _seed_reference(self, when) -> None:
+        """The first reference: the highest reading of the first minutes.
 
-        if not history_list or self._external_sensor not in history_list:
+        A plant has to show something before it has ever been watered, and the
+        pot it was potted into is the only thing there is to go by. Provisional,
+        and replaced by a measured one at the first watering.
+        """
+        if self._max_moisture_raw:
             return
+        if self._seed_until is None:
+            self._seed_until = when + timedelta(minutes=PEAK_SEED_MINUTES)
+            return
+        if when < self._seed_until:
+            return
+        highest = max(v for _, v in self._peak_buffer)
+        if highest > 0:
+            self._max_moisture_raw = highest
+            self._max_moisture_samples = len(self._peak_buffer)
+            _LOGGER.debug("Seeded moisture reference %s for %s from %s readings",
+                          highest, self.entity_id, len(self._peak_buffer))
 
-        moisture_states = [
-            s for s in history_list[self._external_sensor]
-            if s.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE)
-        ]
-        raw_values = []
-        for state in moisture_states:
-            try:
-                raw_values.append(float(state.state))
-            except (TypeError, ValueError):
-                continue
-        # The percentile of the settled readings after the last watering, which
-        # is field capacity. No second path: a fallback to the percentile over
-        # the whole window would be invisible from the outside, could quietly
-        # become the only path if detection stopped working, and would answer
-        # with a different number than the one the plant is scaled by the rest
-        # of the time. Without a watering in the window there is nothing to
-        # scale against and nothing is published.
-        settled = self._settled_readings(moisture_states)
-        raw_max = self._percentile(settled) if len(settled) >= PEAK_MIN_SAMPLES else None
-        self._max_moisture_raw = raw_max if raw_max and raw_max > 0 else None
-        self._max_moisture_samples = len(settled)
+    def _update_reference(self, when) -> None:
+        """Take the reference from the last watering whose settling has passed.
 
-        self._last_normalize_update = now
+        Once per watering, when its window has closed. Finding nothing leaves
+        the reference that is already held: field capacity does not change
+        because the probe was off the air, and dropping it would blank the
+        reading until the next watering.
+        """
+        peaks = self._watering_peaks(self._peak_buffer)
+        if not peaks:
+            return
+        tpk = peaks[-1]
+        if when < tpk + timedelta(minutes=PEAK_SETTLE_TO):
+            return                      # still settling
+        if self._last_peak_used is not None and tpk <= self._last_peak_used:
+            return                      # this one has been used
+        lo = tpk + timedelta(minutes=PEAK_SETTLE_FROM)
+        hi = tpk + timedelta(minutes=PEAK_SETTLE_TO)
+        pool = [v for t, v in self._peak_buffer if lo <= t <= hi]
+        if len(pool) < PEAK_MIN_SAMPLES:
+            return
+        reference = self._percentile(pool)
+        if not reference or reference <= 0:
+            return
+        self._last_peak_used = tpk
+        self._max_moisture_raw = reference
+        self._max_moisture_samples = len(pool)
         if self._max_moisture:
-            self._normalize_factor = 100 / self._max_moisture  # Exakter Wert für Berechnungen
-        _LOGGER.debug(
-            "Updated moisture window: maximum=%s from %s settled readings "
-            "after the last watering (%s values in the window)",
-            self._max_moisture_raw,
-            len(settled),
-            len(raw_values),
-        )
+            self._normalize_factor = 100 / self._max_moisture
+        _LOGGER.debug("Moisture reference %s for %s from %s readings after %s",
+                      reference, self.entity_id, len(pool), tpk)
 
     @staticmethod
     def _watering_peaks(samples):
@@ -970,32 +1009,6 @@ class PlantCurrentMoisture(PlantCurrentStatus):
                 i += 1
         return peaks
 
-    def _settled_readings(self, moisture_states):
-        """Readings taken while the pot stood at field capacity.
-
-        PEAK_SETTLE_FROM to PEAK_SETTLE_TO minutes after a watering. Walked
-        backwards from the newest, so the reference comes from the most recent
-        watering whose settling window has passed and holds enough readings:
-        the one just gone has not settled yet, and an older one would be stale.
-        """
-        samples = []
-        for state in moisture_states:
-            try:
-                samples.append((state.last_updated, float(state.state)))
-            except (TypeError, ValueError):
-                continue
-        samples.sort(key=lambda s: s[0])
-        if len(samples) < 2:
-            return []
-        peaks = self._watering_peaks(samples)
-        for tpk in reversed(peaks[-PEAK_EVENTS - 2:]):
-            lo = tpk + timedelta(minutes=PEAK_SETTLE_FROM)
-            hi = tpk + timedelta(minutes=PEAK_SETTLE_TO)
-            pool = [v for t, v in samples if lo <= t <= hi]
-            if len(pool) >= PEAK_MIN_SAMPLES:
-                return pool
-        return []
-
     @property
     def extra_state_attributes(self) -> dict:
         """Return additional sensor attributes."""
@@ -1005,7 +1018,6 @@ class PlantCurrentMoisture(PlantCurrentStatus):
             attributes.update({
                 "moisture_normalization": {
                     "enabled": True,
-                    "window_days": self._normalize_window,
                     "percentile": self._normalize_percentile,
                     "current_max": self._max_moisture,
                     "settled_samples": self._max_moisture_samples,
@@ -1156,6 +1168,20 @@ class PlantCurrentMoisture(PlantCurrentStatus):
         self._attr_native_value = round(min(100.0, max(0.0, value)), 1)
 
     @property
+    def extra_restore_state_data(self) -> MoistureReferenceExtraStoredData:
+        """Keep the reference across a restart.
+
+        It is not recomputed from history any more, so without this a plant
+        would lose its scale on every restart and show nothing until the next
+        watering had settled.
+        """
+        return MoistureReferenceExtraStoredData(
+            self.native_value,
+            self.native_unit_of_measurement,
+            self._max_moisture_raw,
+        )
+
+    @property
     def smoothed_value(self):
         """Return the de-jittered reading, on the scale of the published state.
 
@@ -1196,10 +1222,9 @@ class PlantCurrentMoisture(PlantCurrentStatus):
         super().state_changed(entity_id, new_state)
         self._raw_value = self._attr_native_value
         if self._raw_value is not None:
-            self._add_sample(
-                self._raw_value,
-                new_state.last_updated if new_state is not None else None,
-            )
+            stamp = new_state.last_updated if new_state is not None else None
+            self._add_sample(self._raw_value, stamp)
+            self._note_reading(self._raw_value, stamp)
         self._apply_smoothing()
         self._apply_normalization()
 
@@ -1218,12 +1243,6 @@ class PlantCurrentMoisture(PlantCurrentStatus):
         # den aktuellen Wert.
         self._apply_smoothing()
 
-        # Erst skalieren, dann das Maximum auffrischen. Andersherum stand
-        # waehrend der Neuberechnung der Rohwert in der Entity -- und die ist
-        # ein await auf den Recorder, alle fuenf Minuten. Genau in diesem
-        # Fenster las die Pflanze den Wert fuer ihre Schwellenpruefung.
-        self._apply_normalization()
-        await self._update_normalization()
         self._apply_normalization()
 
     @property

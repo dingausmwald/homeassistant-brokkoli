@@ -37,7 +37,6 @@
           "power_consumption_sensor": "Power Consumption Sensor",
           "ph_sensor": "pH Sensor",
           "normalize_moisture": "Normalize moisture values",
-          "normalize_window": "Normalization window (days)",
           "normalize_percentile": "Normalization percentile",
           "pot_size": "Pot size (L)",
           "water_capacity": "Water capacity (L)"
@@ -123,7 +122,6 @@
           "power_consumption_trigger": "Use power consumption as problem trigger",
           "strain": "Strain",
           "normalize_moisture": "Normalise moisture readings",
-          "normalize_window": "Normalisation window (days)",
           "normalize_percentile": "Normalisation percentile",
           "power_consumption_sensor": "Power consumption sensor",
           "ph_sensor": "pH sensor",
@@ -154,7 +152,6 @@
           "default_pot_size": "Default pot size (L)",
           "default_water_capacity": "Default water capacity (%)",
           "default_normalize_moisture": "Normalise moisture readings by default",
-          "default_normalize_window": "Default normalisation window (days)",
           "default_normalize_percentile": "Default normalisation percentile",
           "kwh_price": "Electricity price (per kWh)",
           "download_path": "Download path for images",

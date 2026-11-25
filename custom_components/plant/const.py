@@ -233,28 +233,36 @@ PORE_SMOOTH_WINDOW_MINUTES = 30
 # low until the reference has followed, and an automatic irrigation driven by
 # it then waters more, which keeps the pot full and the reading low.
 #
-# The pool is the last watering alone. Pooling several was measured as well and
-# gained nothing: standard deviation 0.7 to 9.0 raw points against 0.6 to 8.8
-# for the single event, at the same speed. One watering leaves 13 to 37 readings
+# The reference comes from the last watering alone. Pooling several was measured
+# as well and gained nothing: standard deviation 0.7 to 9.0 raw points against
+# 0.6 to 8.8 for the single event, at the same speed. One watering leaves 13 to 37 readings
 # in the settling window, which is enough for a percentile; the probes do not
 # report every minute, so the count varies. The most recent watering whose
 # settling window has passed and holds at least PEAK_MIN_SAMPLES readings is
 # used -- the one just gone has not settled yet.
 #
-# There is no second path. Falling back to the percentile over the whole window
-# would be invisible from the outside, could quietly become the only path if
-# detection stopped working, and would answer with a different number than the
-# one the plant is scaled by the rest of the time. A plant whose window holds no
-# watering -- freshly potted into moist medium and not yet watered -- publishes
-# no moisture until it has been watered once. A restart is not such a case: the
-# reference is rebuilt from the recorder, which holds far more than the window.
+# There is no second path. Falling back to a percentile over everything would
+# be invisible from the outside, could quietly become the only path if detection
+# stopped working, and would answer with a different number than the one the
+# plant is scaled by the rest of the time.
+#
+# Detection runs on the readings as they arrive, over PEAK_BUFFER_MINUTES held
+# in memory -- long enough for a peak plus its settling window. Nothing is read
+# back from the recorder: an existing plant restores its reference across a
+# restart, and a plant that was just created has no past worth searching.
+#
+# The first reference is the highest reading of the plant's first
+# PEAK_SEED_MINUTES, so there is a scale from the start. It is provisional and
+# only as good as the pot's state at that moment -- potted moist, it reads 100 %
+# at once -- and the first watering replaces it with a measured one.
 PEAK_RISE = 3.0          # raw points, within PEAK_RISE_WINDOW, to call it a watering
 PEAK_RISE_WINDOW = 15    # minutes
 PEAK_FALL = 2.0          # raw points the reading drops back from the peak
 PEAK_SETTLE_FROM = 80    # minutes after the peak, where field capacity is read
 PEAK_SETTLE_TO = 120
-PEAK_EVENTS = 1          # waterings the reference is taken from
-PEAK_MIN_SAMPLES = 8     # below this the window percentile is used
+PEAK_MIN_SAMPLES = 8     # below this no reference is taken from the event
+PEAK_BUFFER_MINUTES = 150  # readings kept in memory: peak plus settling window
+PEAK_SEED_MINUTES = 5    # first reference: the highest reading of these minutes
 
 SERVICE_REPLACE_SENSOR = "replace_sensor"
 SERVICE_REMOVE_PLANT = "remove_plant"
@@ -457,9 +465,7 @@ CONF_AGGREGATION = "aggregation"
 
 # Neue Konstanten für Sensor-Normalisierung
 ATTR_NORMALIZE_MOISTURE = "normalize_moisture"
-ATTR_NORMALIZE_WINDOW = "normalize_window"
 ATTR_NORMALIZE_PERCENTILE = "normalize_percentile"
-DEFAULT_NORMALIZE_WINDOW = 7  # Tage
 DEFAULT_NORMALIZE_PERCENTILE = 95
 
 # Moisture smoothing. Not a setting: the smoothed reading is offered alongside

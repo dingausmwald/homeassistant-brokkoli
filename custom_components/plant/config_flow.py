@@ -49,9 +49,7 @@ from .const import (
     DEFAULT_AGGREGATIONS,
     CONF_AGGREGATION,
     ATTR_NORMALIZE_MOISTURE,
-    ATTR_NORMALIZE_WINDOW,
     ATTR_NORMALIZE_PERCENTILE,
-    DEFAULT_NORMALIZE_WINDOW,
     DEFAULT_NORMALIZE_PERCENTILE,
     ATTR_ENTITY,
     ATTR_LIMITS,
@@ -272,7 +270,6 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     "default_pot_size": DEFAULT_POT_SIZE,
                     "default_water_capacity": DEFAULT_WATER_CAPACITY,
                     "default_normalize_moisture": False,
-                    "default_normalize_window": DEFAULT_NORMALIZE_WINDOW,
                     "default_normalize_percentile": DEFAULT_NORMALIZE_PERCENTILE,
                     CONF_DEFAULT_PORE_EXPONENT: DEFAULT_PORE_EXPONENT,
                     CONF_DEFAULT_LUX_TO_PPFD: DEFAULT_LUX_TO_PPFD,
@@ -497,7 +494,6 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 ATTR_POT_SIZE: user_input.get(ATTR_POT_SIZE, DEFAULT_POT_SIZE),
                 ATTR_WATER_CAPACITY: user_input.get(ATTR_WATER_CAPACITY, DEFAULT_WATER_CAPACITY),
                 ATTR_NORMALIZE_MOISTURE: user_input.get(ATTR_NORMALIZE_MOISTURE, False),
-                ATTR_NORMALIZE_WINDOW: user_input.get(ATTR_NORMALIZE_WINDOW, DEFAULT_NORMALIZE_WINDOW),
                 ATTR_NORMALIZE_PERCENTILE: user_input.get(ATTR_NORMALIZE_PERCENTILE, DEFAULT_NORMALIZE_PERCENTILE),
                 # Füge die Sensorzuweisungen hinzu
                 FLOW_SENSOR_TEMPERATURE: user_input.get(FLOW_SENSOR_TEMPERATURE),
@@ -633,7 +629,6 @@ class PlantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ),
             
             vol.Optional(ATTR_NORMALIZE_MOISTURE, default=config_data.get("default_normalize_moisture")): cv.boolean,
-            vol.Optional(ATTR_NORMALIZE_WINDOW, default=config_data.get("default_normalize_window")): cv.positive_int,
             vol.Optional(ATTR_NORMALIZE_PERCENTILE, default=config_data.get("default_normalize_percentile")): cv.positive_int,
         }
 
@@ -1022,7 +1017,6 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     "default_pot_size": "default_pot_size",
                     "default_water_capacity": "default_water_capacity",
                     "default_normalize_moisture": "default_normalize_moisture",
-                    "default_normalize_window": "default_normalize_window",
                     "default_normalize_percentile": "default_normalize_percentile",
                     CONF_DEFAULT_PORE_EXPONENT: CONF_DEFAULT_PORE_EXPONENT,
                     CONF_DEFAULT_LUX_TO_PPFD: CONF_DEFAULT_LUX_TO_PPFD,
@@ -1132,7 +1126,6 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     data = dict(self.entry.data)
                     
                     new_normalize = user_input.get(ATTR_NORMALIZE_MOISTURE)
-                    new_window = user_input.get(ATTR_NORMALIZE_WINDOW)
                     new_percentile = user_input.get(ATTR_NORMALIZE_PERCENTILE)
                     
                     if new_normalize is not None:
@@ -1140,12 +1133,6 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                         if new_normalize != old_normalize:
                             normalize_changed = True
                         data[FLOW_PLANT_INFO][ATTR_NORMALIZE_MOISTURE] = new_normalize
-                        
-                    if new_window is not None:
-                        old_window = data[FLOW_PLANT_INFO].get(ATTR_NORMALIZE_WINDOW, DEFAULT_NORMALIZE_WINDOW)
-                        if new_window != old_window:
-                            normalize_changed = True
-                        data[FLOW_PLANT_INFO][ATTR_NORMALIZE_WINDOW] = new_window
                         
                     if new_percentile is not None:
                         old_percentile = data[FLOW_PLANT_INFO].get(ATTR_NORMALIZE_PERCENTILE, DEFAULT_NORMALIZE_PERCENTILE)
@@ -1169,7 +1156,6 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                         # Sensoren direkt aktualisieren
                         if normalize_changed and self.plant.sensor_moisture:
                             self.plant.sensor_moisture._normalize = new_normalize
-                            self.plant.sensor_moisture._normalize_window = new_window
                             self.plant.sensor_moisture._normalize_percentile = new_percentile
                             # Window statistics belong to the old percentile.
                             self.plant.sensor_moisture._max_moisture_raw = None
@@ -1339,10 +1325,6 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     default=self.entry.data[FLOW_PLANT_INFO].get("default_normalize_moisture", False)
                 ): cv.boolean,
                 vol.Optional(
-                    "default_normalize_window",
-                    default=self.entry.data[FLOW_PLANT_INFO].get("default_normalize_window", DEFAULT_NORMALIZE_WINDOW)
-                ): cv.positive_int,
-                vol.Optional(
                     "default_normalize_percentile",
                     default=self.entry.data[FLOW_PLANT_INFO].get("default_normalize_percentile", DEFAULT_NORMALIZE_PERCENTILE)
                 ): cv.positive_int,
@@ -1479,15 +1461,11 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
                 # Füge Normalisierungseinstellungen hinzu
                 current_normalize = self.entry.data[FLOW_PLANT_INFO].get(ATTR_NORMALIZE_MOISTURE, False)
-                current_window = self.entry.data[FLOW_PLANT_INFO].get(ATTR_NORMALIZE_WINDOW, DEFAULT_NORMALIZE_WINDOW)
                 current_percentile = self.entry.data[FLOW_PLANT_INFO].get(ATTR_NORMALIZE_PERCENTILE, DEFAULT_NORMALIZE_PERCENTILE)
 
                 data_schema[
                     vol.Optional(ATTR_NORMALIZE_MOISTURE, default=current_normalize)
                 ] = cv.boolean
-                data_schema[
-                    vol.Optional(ATTR_NORMALIZE_WINDOW, default=current_window)
-                ] = cv.positive_int
                 data_schema[
                     vol.Optional(ATTR_NORMALIZE_PERCENTILE, default=current_percentile)
                 ] = cv.positive_int

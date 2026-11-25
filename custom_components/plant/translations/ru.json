@@ -37,7 +37,6 @@
           "power_consumption_sensor": "Датчик потребления энергии",
           "ph_sensor": "Датчик pH",
           "normalize_moisture": "Нормализовать значения влажности",
-          "normalize_window": "Окно нормализации (дни)",
           "normalize_percentile": "Процентиль нормализации",
           "pot_size": "Размер горшка (л)",
           "water_capacity": "Объем воды (л)"

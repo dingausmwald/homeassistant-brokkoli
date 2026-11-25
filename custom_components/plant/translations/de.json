@@ -37,7 +37,6 @@
           "power_consumption_sensor": "Stromverbrauchssensor",
           "ph_sensor": "pH-Sensor",
           "normalize_moisture": "Feuchtigkeitswerte normalisieren",
-          "normalize_window": "Normalisierungsfenster (Tage)",
           "normalize_percentile": "Normalisierungspercentil",
           "pot_size": "Topfgröße (L)",
           "water_capacity": "Wasserkapazität (L)"
@@ -123,7 +122,6 @@
           "power_consumption_trigger": "Stromverbrauch als Problemauslöser verwenden",
           "strain": "Strain",
           "normalize_moisture": "Bodenfeuchte normalisieren",
-          "normalize_window": "Normalisierungsfenster (Tage)",
           "normalize_percentile": "Normalisierungs-Perzentil",
           "power_consumption_sensor": "Stromverbrauchssensor",
           "ph_sensor": "pH-Sensor",
@@ -154,7 +152,6 @@
           "default_pot_size": "Standard-Topfgröße (L)",
           "default_water_capacity": "Standard-Wasserkapazität (%)",
           "default_normalize_moisture": "Bodenfeuchte standardmäßig normalisieren",
-          "default_normalize_window": "Standard-Normalisierungsfenster (Tage)",
           "default_normalize_percentile": "Standard-Normalisierungs-Perzentil",
           "kwh_price": "Strompreis (pro kWh)",
           "download_path": "Speicherpfad für Bilder",
